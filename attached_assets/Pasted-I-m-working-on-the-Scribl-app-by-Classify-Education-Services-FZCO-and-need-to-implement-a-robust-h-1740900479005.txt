@@ -1,0 +1,59 @@
+I'm working on the Scribl app (by Classify Education Services FZCO) and need to implement a robust highlighting feature for the analysis and portfolio pages. The goal is to highlight parts of the extracted text that match examples of success criteria (SC) provided by teachers. The success criteria are dynamic and defined by teachers, so they may vary from one class to another.
+
+Current Setup:
+
+The AI analysis returns an array of SC markers (called criteria_marks), where each marker has:
+A justification field that includes one or more example phrases enclosed in single quotes.
+A score field (with 1 for partially met and 2 for fully met).
+Currently, we use a simple string replacement function to wrap matching parts of the extracted text with <span> tags styled as either .highlight-partial (yellow) or .highlight-full (green). However, the results have been inconsistent:
+Some unwanted words (like adverbs/adjectives) are being highlighted.
+Certain phrases are misclassified (e.g., “because” being highlighted incorrectly when it should not be).
+Overlapping or nested highlights create messy output.
+Requirements for the New Feature:
+
+Two-Pass Process:
+
+First Pass: Let the AI analysis run as usual and produce the criteria_marks array.
+Second Pass: Use a separate helper function to re-read the extracted text and apply highlights based on the SC markers.
+Dynamic and Teacher-Defined SC:
+
+Teachers may define SC dynamically, so we cannot rely solely on a static dictionary.
+Ideally, teachers will explicitly list the exact words/phrases (inside single quotes) they want highlighted in their success criteria.
+However, if the teacher does not provide an explicit list, the function should use the AI’s provided examples.
+Robust Highlighting Algorithm:
+
+Instead of simple multiple string replacements (which may lead to overlapping or nested replacements), the algorithm should:
+Collect all occurrences of the example phrases (using a case-insensitive match).
+Sort the matches by length (longest first) to avoid conflicts.
+Merge overlapping matches to prevent duplicate or nested <span> tags.
+Finally, rebuild the final highlighted string in one pass.
+If the teacher-defined criteria include examples that are not valid (e.g., if “because” appears but it is not intended), consider allowing an optional filter step where the teacher can review or manually override incorrect highlights.
+Non-Disruptive Integration:
+
+The new code must integrate seamlessly into the current Scribl app without altering the existing workflow.
+The current AI analysis and extraction process should remain unchanged; only the second pass (highlighting) is being modified.
+The final output should display the extracted text with yellow highlights for partial matches (score = 1) and green highlights for full matches (score = 2).
+CSS Styling:
+
+Use the following CSS (or modify slightly if needed):
+css
+Copy
+Edit
+.highlight-partial {
+    background-color: #ffd700 !important; /* Yellow for partial matches */
+    padding: 2px 4px !important;
+    display: inline !important;
+}
+.highlight-full {
+    background-color: #90EE90 !important; /* Green for full matches */
+    padding: 2px 4px !important;
+    display: inline !important;
+}
+Your Task: Please provide updated JavaScript code for the helper function (e.g., highlightText) that:
+
+Implements the robust, two-pass highlighting process as described above.
+Handles merging and avoiding overlapping matches.
+Optionally includes an approach for teachers to define or filter out unwanted matches.
+Integrates into the existing Scribl app without breaking its current functionality.
+Please include any necessary comments or instructions for integration.
+

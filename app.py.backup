@@ -1,0 +1,3168 @@
+import os
+import logging
+import json
+import csv
+import time
+import hashlib
+import functools
+import base64
+from io import StringIO, BytesIO
+from datetime import datetime, timedelta
+from functools import wraps
+
+# Flask and SQLAlchemy imports
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response, send_from_directory, make_response
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import func, distinct, case
+from sqlalchemy.exc import OperationalError
+
+# Image and data processing
+from PIL import Image
+import pandas as pd
+
+# OpenAI
+from openai import OpenAI
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Create and configure the Flask app
+app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL")
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_recycle": 300,
+    "pool_pre_ping": True,
+}
+
+# Define nocache decorator
+def nocache(view):
+    @wraps(view)
+    def no_cache(*args, **kwargs):
+        response = make_response(view(*args, **kwargs))
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '-1'
+        return response
+    return nocache
+
+# Apply nocache decorator to static files
+@app.route('/static/<path:filename>')
+@nocache
+def static_files(filename):
+    return send_from_directory('static', filename)
+
+# Initialize SQLAlchemy and import models after db setup
+from database import init_db, db
+init_db(app)
+
+# Import models and forms after initialization
+from models import User, Writing, Class, Student, Assignment
+from forms import StudentForm, AssignmentForm, SettingsForm
+from mailchimp_utils import add_user_to_mailchimp, tag_user_first_analysis
+
+@app.route('/add_student', methods=['POST'])
+@login_required
+def add_student():
+    """Add a single student."""
+    form = StudentForm()
+    if form.validate_on_submit():
+        try:
+            student = Student(
+                student_id=form.student_id.data,
+                first_name=form.first_name.data,
+                last_name=form.last_name.data,
+                date_of_birth=form.date_of_birth.data,
+                class_id=request.form.get('class_id')
+            )
+            db.session.add(student)
+            db.session.commit()
+            flash('Student added successfully!', 'success')
+            return redirect(url_for('classes'))
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error adding student: {str(e)}")
+            flash('Error adding student', 'error')
+    else:
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{field}: {error}', 'error')
+
+    return redirect(url_for('classes'))
+
+
+@app.route('/upload_students', methods=['POST'])
+@login_required
+def upload_students():
+    """Upload multiple students via CSV."""
+    if 'file' not in request.files:
+        flash('No file uploaded', 'error')
+        return redirect(url_for('classes'))
+
+    file = request.files['file']
+    class_id = request.form.get('class_id')
+
+    if not file.filename.endswith('.csv'):
+        flash('Please upload a CSV file', 'error')
+        return redirect(url_for('classes'))
+
+    try:
+        # Read CSV file
+        stream = StringIO(file.stream.read().decode("UTF8"), newline=None)
+        csv_input = csv.DictReader(stream)
+
+        students_added = 0
+        row_errors = []
+
+        # Log the headers we received
+        logger.debug(f"CSV Headers: {csv_input.fieldnames}")
+
+        for row_num, row in enumerate(csv_input, start=1):
+            try:
+                # Log the row for debugging
+                logger.debug(f"Processing CSV row {row_num}: {dict(row)}")
+
+                # Clean and validate data
+                first_name = row.get('First Name', '').strip()
+                last_name = row.get('Last Name', '').strip()
+                student_id = row.get('Student ID', '').strip() or None  # Convert empty string to None
+
+                if not first_name or not last_name:
+                    row_errors.append(f"Row {row_num}: First name and last name are required")
+                    continue
+
+                try:
+                    dob = datetime.strptime(row.get('Date of Birth', '').strip(), '%Y-%m-%d').date()
+                except ValueError:
+                    row_errors.append(f"Row {row_num}: Invalid date format. Use YYYY-MM-DD")
+                    continue
+
+                # Create student
+                student = Student(
+                    student_id=student_id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    date_of_birth=dob,
+                    class_id=class_id
+                )
+                db.session.add(student)
+                students_added += 1
+
+            except Exception as e:
+                row_errors.append(f"Row {row_num}: {str(e)}")
+                logger.error(f"Error processing student row {row_num}: {str(e)}")
+                continue
+
+        if students_added > 0:
+            try:
+                db.session.commit()
+                if row_errors:
+                    flash(f'Added {students_added} students successfully. Some rows had errors that were skipped.', 'info')
+                else:
+                    flash(f'Successfully added {students_added} students!', 'success')
+                return redirect(url_for('classes'))
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Database error: {str(e)}")
+                flash('Error saving students to database', 'error')
+        else:
+            flash('No students could be added. Please check the CSV format and try again.', 'warning')
+
+    except Exception as e:
+        logger.error(f"CSV processing error: {str(e)}")
+        flash('Error processing CSV file. Please check the format: Student ID (optional), First Name, Last Name, Date of Birth (YYYY-MM-DD)', 'error')
+
+    return redirect(url_for('classes'))
+
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# Initialize OpenAI client
+client = OpenAI()
+
+# The newest OpenAI model is "gpt-4o" which was released May 13, 2024.
+MODEL_NAME = "gpt-4o"
+
+# Simple in-memory cache
+class SimpleCache:
+    def __init__(self, expiry_minutes=30):
+        self.cache = {}
+        self.expiry = timedelta(minutes=expiry_minutes)
+
+    def get(self, key):
+        if key in self.cache:
+            entry = self.cache[key]
+            if datetime.now() - entry['timestamp'] < self.expiry:
+                return entry['data']
+            else:
+                # Expired
+                del self.cache[key]
+        return None
+
+    def set(self, key, data):
+        self.cache[key] = {
+            'data': data,
+            'timestamp': datetime.now()
+        }
+
+    def clear(self):
+        self.cache = {}
+
+# Initialize cache
+api_cache = SimpleCache(expiry_minutes=60)
+
+# Cache decorator for expensive functions
+def cached(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # Create a unique key based on function args
+        key_parts = [func.__name__]
+        key_parts.extend([str(arg) for arg in args])
+        key_parts.extend([f"{k}={v}" for k, v in sorted(kwargs.items())])
+
+        # For image data specifically, use a hash of the first few KB
+        if 'base64_image' in kwargs:
+            # Use only first part of image data for hashing (first 5KB is usually enough)
+            img_sample = kwargs['base64_image'][:5000] if kwargs['base64_image'] else ''
+            key_parts.append(hashlib.md5(img_sample.encode()).hexdigest())
+
+        cache_key = hashlib.md5(''.join(key_parts).encode()).hexdigest()
+
+        # Check cache
+        cached_result = api_cache.get(cache_key)
+        if cached_result:
+            logger.debug(f"Cache hit for {func.__name__}")
+            return cached_result
+
+        # Run function and cache result
+        result = func(*args, **kwargs)
+        api_cache.set(cache_key, result)
+        return result
+
+    return wrapper
+
+@app.route('/process_image', methods=['POST'])
+@login_required
+def process_image():
+    """Process uploaded writing sample image and return analysis."""
+    try:
+        # Get the base64 image data from the request
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({'error': 'No image data provided'}), 400
+
+        base64_image = data['image'].split(',')[1]  # Remove the data:image/jpeg;base64, prefix
+        assignment_id = data.get('assignment_id')
+        student_id = data.get('student_id')
+
+        # Get assignment if ID provided
+        assignment = None
+        if assignment_id:
+            assignment = Assignment.query.get(assignment_id)
+
+        # Analyze the writing
+        analysis_result = analyze_writing(base64_image, assignment)
+
+        if analysis_result:
+            # Create new writing record
+            writing_sample = Writing(
+                filename=data.get('filename', 'uploaded_image.jpg'),
+                image_data=base64_image,
+                analysis_result=json.dumps(analysis_result),
+                text_content=analysis_result.get('extracted_text', ''),
+                writing_age=analysis_result.get('age', ''),
+                feedback=analysis_result.get('feedback', ''),
+                user_id=current_user.id,
+                assignment_id=assignment_id if assignment_id else None,
+                student_id=student_id if student_id else None,
+                created_at=datetime.utcnow()
+            )
+
+            # Save to database
+            db.session.add(writing_sample)
+            db.session.commit()
+
+            # Check if this is the user's first writing analysis
+            try:
+                writing_count = Writing.query.filter_by(user_id=current_user.id).count()
+                if writing_count == 1:  # This means it's their first writing
+                    success = tag_user_first_analysis(current_user.email)
+                    if success:
+                        logger.info(f"Successfully tagged user {current_user.email} with 'Scribl Used'")
+                    else:
+                        logger.warning(f"Failed to tag user {current_user.email} with 'Scribl Used'")
+            except Exception as e:
+                logger.error(f"Error checking first writing analysis: {str(e)}")
+                # Continue with the response even if tagging fails
+
+            return jsonify({
+                'status': 'success',
+                'analysis': analysis_result,
+                'writing_id': writing_sample.id
+            })
+        else:
+            return jsonify({'error': 'Failed to analyze writing'}), 500
+
+    except Exception as e:
+        logger.error(f"Error processing image: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Helper function to retry database operations
+def db_operation_with_retry(operation, max_retries=3):
+    """Execute a database operation with retry logic for connection errors"""
+    retry_delay = 1  # seconds
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            result = operation()
+            db.session.commit()
+            return result
+        except OperationalError as e:
+            last_error = e
+            logger.warning(f"Database connection error (attempt {attempt+1}/{max_retries}): {str(e)}")
+            db.session.rollback()
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+        except Exception as e:
+            last_error = e
+            logger.error(f"Database operation error: {str(e)}")
+            db.session.rollback()
+            break
+
+    # If we got here, all attempts failed
+    raise last_error or Exception("Failed to complete database operation")
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    from models import User
+    return User.query.get(int(user_id))
+
+# Authentication routes
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    from forms import LoginForm
+    form = LoginForm()
+
+    if form.validate_on_submit():
+        from models import User
+        try:
+            user = User.query.filter_by(email=form.email.data).first()
+            logger.info(f"Login attempt for email: {form.email.data}")
+
+            if user and user.check_password(form.password.data):
+                # Update last login time
+                user.last_login = datetime.utcnow()
+                db.session.commit()
+
+                login_user(user)
+                logger.info(f"Successful login for user: {user.email}")
+                return redirect(url_for('index'))
+            else:
+                if not user:
+                    logger.warning(f"Login failed - no user found for email: {form.email.data}")
+                else:
+                    logger.warning(f"Login failed - invalid password for user: {form.email.data}")
+                flash('Invalid email or password')
+        except Exception as e:
+            logger.error(f"Login error: {str(e)}")
+            flash('An error occurred during login. Please try again.')
+
+    return render_template('login.html', form=form)
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    from forms import SignupForm
+    form = SignupForm()
+
+    if form.validate_on_submit():
+        from models import User
+        if User.query.filter_by(email=form.email.data).first():
+            flash('Email address already registered')
+            return render_template('signup.html', form=form)
+
+        user = User(
+            first_name=form.first_name.data,
+            last_name=form.last_name.data,
+            email=form.email.data,
+            created_at=datetime.utcnow()
+        )
+        user.set_password(form.password.data)
+
+        try:
+            # First add user to database
+            db.session.add(user)
+            db.session.commit()
+            logger.info(f"Successfully created user account for {user.email}")
+
+            # Then try to add to Mailchimp with separate first and last name
+            try:
+                success = add_user_to_mailchimp(
+                    email=user.email,
+                    first_name=user.first_name,
+                    last_name=user.last_name
+                )
+                if success:
+                    logger.info(f"Successfully added {user.email} to Mailchimp audience")
+                else:
+                    logger.warning(f"Failed to add {user.email} to Mailchimp audience")
+            except Exception as e:
+                logger.error(f"Mailchimp error for {user.email}: {str(e)}")
+                # Continue with signup even if Mailchimp fails
+
+            # Log in the new user
+            login_user(user)
+            return redirect(url_for('index'))
+
+        except Exception as e:
+            logger.error(f"Database error during signup: {str(e)}")
+            db.session.rollback()
+            flash('An error occurred during signup. Please try again.')
+
+    return render_template('signup.html', form=form)
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
+@app.route('/classes')
+@login_required
+def classes():
+    """Display classes and their students."""
+    from forms import ClassForm, StudentForm
+    from models import Writing
+    from sqlalchemy import func
+
+    class_form = ClassForm()
+    student_form = StudentForm()
+
+    # Get all classes for the current user
+    user_classes = Class.query.filter_by(teacher_id=current_user.id).all()
+
+    for class_ in user_classes:
+        # Make sure students are ordered by name
+        class_.students = sorted(class_.students, 
+                               key=lambda s: f"{s.first_name} {s.last_name}")
+
+        # Pre-load writing samples for each student
+        for student in class_.students:
+            student.writing_samples = Writing.query.filter_by(student_id=student.id).all()
+
+    return render_template('classes.html',
+                         class_form=class_form,
+                         student_form=student_form,
+                         classes=user_classes)
+
+@app.route('/admin/delete-user/<int:user_id>', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    """Delete a single user and their associated data."""
+    logger.info(f"Delete user request received for user_id: {user_id}")
+    logger.info(f"Current user: {current_user.email}, is_admin: {getattr(current_user, 'is_admin', False)}")
+
+    if not current_user.is_authenticated:
+        logger.warning("Unauthorized: User not authenticated")
+        return jsonify({'error': 'Unauthorized - not authenticated'}), 403
+
+    if not current_user.is_admin:
+        logger.warning(f"Unauthorized: User {current_user.email} is not an admin")
+        return jsonify({'error': 'Unauthorized - not admin'}), 403
+
+    try:
+        user_to_delete = User.query.get_or_404(user_id)
+
+        # Don't allow admin to delete themselves
+        if user_to_delete.id == current_user.id:
+            logger.warning("Attempted to delete own admin account")
+            return jsonify({'error': 'Cannot delete your own admin account'}), 400
+
+        # Delete associated data using SQLAlchemy cascade
+        db.session.delete(user_to_delete)
+        db.session.commit()
+
+        logger.info(f"Successfully deleted user {user_id}")
+        return jsonify({'message': 'User deleted successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Error deleting user {user_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete user'}), 500
+
+@app.route('/admin')
+@login_required
+def admin_dashboard():
+    """Admin dashboard with enhanced user metrics and management."""
+    if not current_user.is_admin:
+        flash('Unauthorized access')
+        return redirect(url_for('index'))
+
+    try:
+        # Get all teachers (non-admin users)
+        teachers = User.query.filter_by(is_admin=False).all()
+
+        # Calculate overall metrics
+        metrics = {
+            'total_users': User.query.count(),
+            'total_writings': Writing.query.count(),
+            'total_classes': Class.query.count(),
+            'total_students': Student.query.count()
+        }
+
+        logger.info(f"Admin dashboard loaded with {len(teachers)} teachers")
+        return render_template('admin_dashboard.html', 
+                             teachers=teachers,
+                             metrics=metrics)
+
+    except Exception as e:
+        logger.error(f"Error loading admin dashboard: {str(e)}")
+        flash('An error occurred while loading the dashboard')
+        return redirect(url_for('index'))
+
+@app.route('/admin/export', methods=['GET'])
+@login_required
+def export_users():
+    """Export user data to Excel."""
+    if not current_user.is_admin:
+        flash('Unauthorized access')
+        return redirect(url_for('index'))
+
+    try:
+        from io import BytesIO
+
+        # Get all teachers
+        teachers = User.query.filter_by(is_admin=False).all()
+
+        # Convert to list of dictionaries with metrics
+        users_data = [user.to_dict() for user in teachers]
+
+        # Create DataFrame
+        df = pd.DataFrame(users_data)
+
+        # Reorder columns for better readability
+        columns = [
+            'first_name', 'last_name', 'email', 'school_name',
+            'created_at', 'last_login', 'class_count',
+            'student_count', 'upload_count'
+        ]
+        df = df[columns]
+
+        # Rename columns for the Excel file
+        column_names = {
+            'first_name': 'First Name',
+            'last_name': 'Last Name',
+            'email': 'Email',
+            'school_name': 'School',
+            'created_at': 'Signup Date',
+            'last_login': 'Last Login',
+            'class_count': 'Number of Classes',
+            'student_count': 'Total Students',
+            'upload_count': 'Total Uploads'
+        }
+        df = df.rename(columns=column_names)
+
+        # Create Excel file in memory
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Teachers')
+
+            # Auto-adjust columns width
+            worksheet = writer.sheets['Teachers']
+            for idx, col in enumerate(df.columns):
+                max_length = max(
+                    df[col].astype(str).apply(len).max(),
+                    len(col)
+                ) + 2
+                worksheet.column_dimensions[chr(65 + idx)].width = max_length
+
+        # Prepare the response
+        output.seek(0)
+        return Response(
+            output.read(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={
+                "Content-Disposition": "attachment;filename=teachers_report.xlsx",
+                "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting users: {str(e)}")
+        flash('An error occurred while exporting users')
+        return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/delete-users', methods=['POST'])
+@login_required
+def delete_users():
+    """Delete multiple users and their associated data."""
+    logger.info("Bulk delete users request received")
+    logger.info(f"Current user: {current_user.email}, is_admin: {getattr(current_user, 'is_admin', False)}")
+
+    if not current_user.is_authenticated:
+        logger.warning("Unauthorized: User not authenticated")
+        return jsonify({'error': 'Unauthorized - not authenticated'}), 403
+
+    if not current_user.is_admin:
+        logger.warning(f"Unauthorized: User {current_user.email} is not an admin")
+        return jsonify({'error': 'Unauthorized - not admin'}), 403
+
+    try:
+        data = request.get_json()
+        if not data or 'user_ids' not in data:
+            logger.warning("No user IDs provided in request")
+            return jsonify({'error': 'No user IDs provided'}), 400
+
+        user_ids = data['user_ids']
+        if not isinstance(user_ids, list):
+            logger.warning("Invalid user IDs format provided")
+            return jsonify({'error': 'Invalid user IDs format'}), 400
+
+        # Don't allow admin to delete themselves
+        if current_user.id in user_ids:
+            logger.warning("Attempted to delete own admin account in bulk delete")
+            return jsonify({'error': 'Cannot delete your own admin account'}), 400
+
+        # Delete users and their associated data
+        deleted_count = 0
+        for user_id in user_ids:
+            user = User.query.get(user_id)
+            if user:
+                db.session.delete(user)
+                deleted_count += 1
+
+        db.session.commit()
+        logger.info(f"Successfully deleted {deleted_count} users")
+        return jsonify({'message': f'Successfully deleted {deleted_count} users'}), 200
+
+    except Exception as e:
+        logger.error(f"Error deleting users: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete users'}), 500
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def encode_image_to_base64(image_bytes):
+    return base64.b64encode(image_bytes).decode('utf-8')
+
+@cached
+def analyze_writing(base64_image, assignment=None):
+    """Analyze writing using an ensemble of 3 passes for improved accuracy."""
+    try:
+        logger.debug("Making 3 analysis passes with OpenAI API...")
+
+        # Build curriculum-specific system prompt
+        system_prompt = """You are a master teacher and writing assessment expert with over 30 years of experience. You excel at providing highly consistent, accurate, and detailed writing assessments that align precisely with curriculum standards. Your assessments are reliable, consistent and comparable to experienced teachers' judgments. You can generate writing ages based on curriculum, genere, and other factors such as handwriting and writing length.
+
+For each writing sample, you MUST format your response EXACTLY like this:
+WRITING AGE: [X years Y months]
+
+Strengths:
+- Point 1 with specific example
+- Point 2 with specific example
+- Point 3 with specific example
+
+Areas for Development:
+- Point 1 with suggestion for improvement
+- Point 2 with suggestion for improvement
+- Point 3 with suggestion for improvement"""
+
+        # Make 3 passes
+        all_responses = []
+        all_ages = []
+        for i in range(3):
+            logger.debug(f"Making analysis pass {i+1}/3")
+
+        if assignment:
+            # Add assignment-specific criteria to the prompt
+            system_prompt += f"""
+
+For this assessment, also evaluate against these specific success criteria:
+- Focus on {assignment.curriculum} curriculum standards
+- Consider expectations for {assignment.class_group.year_group if assignment.class_group else 'the appropriate year group'}
+- Evaluate genre-specific elements for {assignment.genre if assignment.genre else 'the writing type'}
+"""
+
+        # Make 3 passes for analysis
+        for _ in range(3):
+            # Analyze the writing sample
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Please analyze this writing sample. Start your response with WRITING AGE: followed by strengths and areas for development."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=1000
+            )
+
+            content = response.choices[0].message.content
+            all_responses.append(content)
+
+            # Extract writing age from each response
+            if 'WRITING AGE:' in content.upper():
+                age_line = [line for line in content.split('\n') if 'WRITING AGE:' in line.upper()][0]
+                age_text = age_line.split(':', 1)[1].strip()
+                # Extract years and months
+                try:
+                    years = int(age_text.split('years')[0].strip())
+                    months = int(age_text.split('months')[0].split('years')[1].strip())
+                    age_in_months = years * 12 + months
+                    all_ages.append(age_in_months)
+                except:
+                    logger.warning(f"Could not parse age from: {age_text}")
+
+        # Calculate average age
+        if all_ages:
+            avg_months = sum(all_ages) / len(all_ages)
+            avg_years = int(avg_months // 12)
+            avg_months_remainder = int(avg_months % 12)
+            avg_age = f"{avg_years} years {avg_months_remainder} months"
+        else:
+            avg_age = "Unable to determine"
+
+        # Combine feedback from all passes
+        combined_feedback = ""
+        strengths_set = set()
+        development_set = set()
+
+        for response in all_responses:
+            parts = response.split('\n\n')
+            for part in parts:
+                if 'Strengths:' in part:
+                    points = [p.strip() for p in part.split('\n') if p.strip().startswith('-')]
+                    strengths_set.update(points)
+                elif 'Areas for Development:' in part:
+                    points = [p.strip() for p in part.split('\n') if p.strip().startswith('-')]
+                    development_set.update(points)
+
+        # Format combined feedback
+        combined_feedback = "Strengths:\n"
+        combined_feedback += '\n'.join(sorted(list(strengths_set)[:3]))  # Take top 3 unique strengths
+        combined_feedback += "\n\nAreas for Development:\n"
+        combined_feedback += '\n'.join(sorted(list(development_set)[:3]))  # Take top 3 unique areas
+
+        # Initialize analysis structure
+        analysis_parts = {
+            'age': avg_age,
+            'feedback': combined_feedback,
+            'justification': '',
+            'extracted_text': ''
+        }
+
+        logger.debug(f"Analysis completed with age: {analysis_parts['age']}")
+        return analysis_parts
+
+    except Exception as e:
+        logger.error(f"Error analyzing writing: {str(e)}")
+        return {
+            'age': 'Error occurred',
+            'feedback': f'Error analyzing writing: {str(e)}',
+            'justification': '',
+            'extracted_text': ''
+        }
+
+@app.route('/')
+@login_required
+def index():
+    from forms import ClassForm, StudentForm
+    class_form = ClassForm()
+    student_form = StudentForm()
+    return render_template('home.html', class_form=class_form, student_form=student_form)
+
+@app.route('/data_analysis')
+@login_required
+def data_analysis():
+    """Data analysis dashboard for comparing student performance."""
+    # Get all classes for the current user
+    user_classes = Class.query.filter_by(teacher_id=current_user.id).all()
+    now = int(datetime.utcnow().timestamp())  # Current timestamp for cache busting
+    return render_template('data_analysis.html', classes=user_classes, now=now)
+
+@app.route('/api/students')
+@login_required
+def get_api_students():
+    """API endpoint to get students for a class or all classes."""
+    class_id = request.args.get('class_id', 'all')
+    
+    if class_id == 'all':
+        # Get students from all classes
+        students = Student.query.join(Class).filter(
+            Class.teacher_id == current_user.id
+        ).order_by(Student.first_name, Student.last_name).all()
+    else:
+        # Get students from specific class
+        students = Student.query.join(Class).filter(
+            Class.id == class_id,
+            Class.teacher_id == current_user.id
+        ).order_by(Student.first_name, Student.last_name).all()
+    
+    return jsonify({
+        'students': [
+            {
+                'id': student.id,
+                'name': f"{student.first_name} {student.last_name}",
+                'class_id': student.class_id
+            } for student in students
+        ]
+    })
+
+@app.route('/api/student_data')
+@login_required
+def get_api_student_data():
+    """API endpoint to get data for chart visualization."""
+    student_ids = request.args.get('ids', '')
+    class_id = request.args.get('class_id', 'all')
+    time_period = request.args.get('time_period', 'all')
+    chart_type = request.args.get('chart_type', 'writing_scores')
+    include_average = request.args.get('include_average', 'false') == 'true'
+    
+    # Parse student IDs
+    if student_ids:
+        student_id_list = [int(id) for id in student_ids.split(',') if id.isdigit()]
+    else:
+        student_id_list = []
+    
+    # Calculate time period filter
+    time_filter = None
+    if time_period != 'all':
+        now = datetime.utcnow()
+        if time_period == 'month':
+            time_filter = now - timedelta(days=30)
+        elif time_period == 'quarter':
+            time_filter = now - timedelta(days=90)
+        elif time_period == 'year':
+            time_filter = now - timedelta(days=365)
+    
+    # Build the datasets
+    datasets = []
+    all_dates = set()
+    
+    # Get data for each student
+    for student_id in student_id_list:
+        # Verify student belongs to current user
+        student = Student.query.join(Class).filter(
+            Student.id == student_id,
+            Class.teacher_id == current_user.id
+        ).first()
+        
+        if not student:
+            continue
+        
+        # Get writing samples with optional filters
+        query = Writing.query.filter(Writing.student_id == student_id)
+        
+        if time_filter:
+            query = query.filter(Writing.created_at >= time_filter)
+        
+        # Get the data based on chart type
+        samples = query.order_by(Writing.created_at).all()
+        data_points = []
+        
+        for sample in samples:
+            if chart_type == 'writing_scores':
+                # Calculate exactly the same way as portfolio page
+                if sample.criteria_marks:
+                    # Using the exact same calculation as student_portfolio_new_temp.html
+                    total_criteria = len(sample.criteria_marks)
+                    criteria_met = sum(1 for mark in sample.criteria_marks if mark.score == 2)
+                    criteria_partial = sum(1 for mark in sample.criteria_marks if mark.score == 1)
+                    
+                    # Calculate percentage the exact same way
+                    met_percent = (criteria_met / total_criteria) * 100
+                    partial_percent = (criteria_partial / total_criteria) * 100
+                    value = met_percent + (partial_percent / 2)
+                else:
+                    continue  # Skip if no criteria marks
+            elif chart_type == 'writing_age':
+                # Extract writing age (e.g., "8.5 years" to 8.5)
+                if sample.writing_age:
+                    try:
+                        value = float(sample.writing_age.split()[0])
+                    except (ValueError, IndexError):
+                        continue
+                else:
+                    continue
+            elif chart_type == 'age_difference':
+                # Calculate difference between writing age and actual age
+                if sample.writing_age:
+                    try:
+                        writing_age = float(sample.writing_age.split()[0])
+                        sample_date = sample.created_at.date()
+                        actual_age = (sample_date - student.date_of_birth).days / 365.25
+                        value = writing_age - actual_age
+                    except (ValueError, IndexError):
+                        continue
+                else:
+                    continue
+            else:
+                continue
+            
+            # Format the date with sample ID to make each point unique
+            # Include writing ID to differentiate between samples on the same day
+            date_str = f"{sample.created_at.strftime('%Y-%m-%d')} ({sample.id})"
+            date_display = sample.created_at.strftime('%d %b %Y')
+            all_dates.add(date_str)
+            data_points.append({
+                'date': date_str,
+                'date_display': date_display,  # User-friendly display format
+                'value': value,
+                'writing_id': sample.id       # Include writing ID for reference
+            })
+        
+        # Skip students with no data
+        if not data_points:
+            continue
+        
+        # Add student dataset
+        datasets.append({
+            'student_id': student.id,
+            'name': f"{student.first_name} {student.last_name}",
+            'data': [point['value'] for point in sorted(data_points, key=lambda x: x['date'])],
+            'dates': [point['date'] for point in sorted(data_points, key=lambda x: x['date'])],
+            'is_average': False
+        })
+    
+    # Add class average if requested
+    if include_average and class_id != 'all' and class_id.isdigit():
+        class_obj = Class.query.filter_by(id=int(class_id), teacher_id=current_user.id).first()
+        
+        if class_obj:
+            # Get all students in the class
+            class_students = Student.query.filter_by(class_id=class_obj.id).all()
+            class_student_ids = [s.id for s in class_students]
+            
+            # Get all dates where we have data
+            all_dates_list = sorted(all_dates)
+            avg_data = []
+            
+            # Calculate average for each sample point
+            for date_str in all_dates_list:
+                # Extract the writing ID from the date string if it's in the format YYYY-MM-DD (ID)
+                writing_id = None
+                if " (" in date_str and ")" in date_str:
+                    try:
+                        writing_id = int(date_str.split("(")[1].split(")")[0])
+                    except (ValueError, IndexError):
+                        writing_id = None
+                
+                # Set default value
+                avg_data.append(None)
+                
+                # Extract the writing ID from the date string if it's in the format YYYY-MM-DD (ID)
+                writing_id = None
+                if " (" in date_str and ")" in date_str:
+                    try:
+                        writing_id = int(date_str.split("(")[1].split(")")[0])
+                    except (ValueError, IndexError):
+                        writing_id = None
+                
+                if writing_id and chart_type == 'writing_scores':
+                    # Find all writing samples with this ID that belong to the class
+                    sample = Writing.query.filter(
+                        Writing.id == writing_id,
+                        Writing.student_id.in_(class_student_ids)
+                    ).first()
+                    
+                    if sample and sample.criteria_marks:
+                        # Calculate the score directly using same method as individual score calculation
+                        total_criteria = len(sample.criteria_marks)
+                        if total_criteria > 0:
+                            criteria_met = sum(1 for mark in sample.criteria_marks if mark.score == 2)
+                            criteria_partial = sum(1 for mark in sample.criteria_marks if mark.score == 1)
+                            
+                            # Calculate percentage the same way as portfolio page
+                            met_percent = (criteria_met / total_criteria) * 100
+                            partial_percent = (criteria_partial / total_criteria) * 100
+                            score_percentage = met_percent + (partial_percent / 2)
+                            
+                            # Replace the None value with the actual score
+                            avg_data[-1] = score_percentage
+                        
+                elif chart_type == 'writing_age':
+                    # Extract the date part for filtering
+                    if " (" in date_str:
+                        date_part = date_str.split(" (")[0]
+                        date_obj = datetime.strptime(date_part, '%Y-%m-%d').date()
+                        next_date = date_obj + timedelta(days=1)
+                    
+                    # Average writing age
+                    samples = Writing.query.filter(
+                        Writing.student_id.in_(class_student_ids),
+                        Writing.created_at >= date_obj,
+                        Writing.created_at < next_date,
+                        Writing.writing_age.isnot(None)
+                    ).all()
+                    
+                    if samples:
+                        writing_ages = []
+                        for s in samples:
+                            try:
+                                writing_ages.append(float(s.writing_age.split()[0]))
+                            except (ValueError, IndexError):
+                                pass
+                        
+                        if writing_ages:
+                            avg_value = sum(writing_ages) / len(writing_ages)
+                            avg_data.append(avg_value)
+                        else:
+                            avg_data.append(None)
+                    else:
+                        avg_data.append(None)
+                
+                elif chart_type == 'age_difference':
+                    # Extract the date part for filtering
+                    if " (" in date_str:
+                        date_part = date_str.split(" (")[0]
+                        date_obj = datetime.strptime(date_part, '%Y-%m-%d').date()
+                        next_date = date_obj + timedelta(days=1)
+                        
+                    # Average age difference
+                    samples = Writing.query.filter(
+                        Writing.student_id.in_(class_student_ids),
+                        Writing.created_at >= date_obj,
+                        Writing.created_at < next_date,
+                        Writing.writing_age.isnot(None)
+                    ).all()
+                    
+                    if samples:
+                        age_diffs = []
+                        for s in samples:
+                            try:
+                                writing_age = float(s.writing_age.split()[0])
+                                student = Student.query.get(s.student_id)
+                                sample_date = s.created_at.date()
+                                actual_age = (sample_date - student.date_of_birth).days / 365.25
+                                age_diffs.append(writing_age - actual_age)
+                            except (ValueError, IndexError):
+                                pass
+                        
+                        if age_diffs:
+                            avg_value = sum(age_diffs) / len(age_diffs)
+                            avg_data.append(avg_value)
+                        else:
+                            avg_data.append(None)
+                    else:
+                        avg_data.append(None)
+            
+            # Add class average dataset if we have data
+            if any(avg_data):
+                datasets.append({
+                    'student_id': 'average',
+                    'name': f"{class_obj.name} Class Average",
+                    'data': avg_data,
+                    'dates': all_dates_list,
+                    'is_average': True
+                })
+    
+    # Get a unified list of dates
+    all_dates_list = sorted(all_dates)
+    
+    # Create a mapping from internal date keys to display format
+    date_display_map = {}
+    for student_dataset in datasets:
+        if 'dates' in student_dataset and hasattr(student_dataset, 'get') and callable(student_dataset.get):
+            for i, date_key in enumerate(student_dataset.get('dates', [])):
+                # Extract the date part before the ID
+                if " (" in date_key:
+                    # Example: "2025-04-12 (123)" -> display as "12 Apr 2025"
+                    date_part = date_key.split(" (")[0]
+                    try:
+                        # Convert to readable format
+                        date_obj = datetime.strptime(date_part, '%Y-%m-%d')
+                        display_date = date_obj.strftime('%d %b %Y')
+                        date_display_map[date_key] = display_date
+                    except:
+                        date_display_map[date_key] = date_key  # Fallback
+    
+    # Generate insights
+    insights = {}
+    if datasets:
+        insights = {
+            'key_observations': [
+                "Select multiple students to compare their progress over time.",
+                "Use the chart filters to explore different metrics and time periods."
+            ],
+            'recommendations': "Focus on students showing significant differences from the class average."
+        }
+    
+    return jsonify({
+        'labels': all_dates_list,
+        'date_displays': date_display_map,  # Map of internal date keys to display format
+        'datasets': datasets,
+        'insights': insights
+    })
+
+@app.route('/add_writing')
+@login_required
+def add_writing():
+    from models import Class
+    # Get classes for the current teacher
+    classes = Class.query.filter_by(teacher_id=current_user.id).all()
+    return render_template('index.html', classes=classes)
+
+@app.route('/analyzer')
+@login_required
+def analyzer():
+    # Redirect to add_writing to maintain consistency
+    return redirect(url_for('add_writing'))
+
+
+@app.route('/get_students/<int:class_id>')
+@login_required
+def get_students(class_id):
+    from models import Class, Student
+    from datetime import datetime
+    class_obj = Class.query.get_or_404(class_id)
+    if class_obj.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    students = Student.query.filter_by(class_id=class_id).all()
+
+    # Calculate age for each student
+    today = datetime.now().date()
+    return jsonify([{
+        'id': student.id,
+        'name': f"{student.first_name} {student.last_name}",
+        'age': (today - student.date_of_birth).days // 365  # Approximate age in years
+    } for student in students])
+
+
+@app.route('/get_assignments/<int:class_id>')
+@login_required
+def get_assignments(class_id):
+    from models import Class, Assignment
+    class_obj = Class.query.get_or_404(class_id)
+    if class_obj.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    # Get all assignments for this class, ordered by creation date
+    assignments = Assignment.query.filter_by(class_id=class_id).order_by(Assignment.created_at.desc()).all()
+
+    # Return assignments with only the fields that exist in the model
+    return jsonify([{
+        'id': assignment.id,
+        'title': assignment.title,
+        'curriculum': assignment.curriculum,
+        'genre': assignment.genre,
+        'created_at': assignment.created_at.isoformat() if assignment.created_at else None
+    } for assignment in assignments])
+
+@app.route('/class/<int:class_id>/assignments/new', methods=['GET', 'POST'])
+@login_required
+def create_assignment(classid):
+    from models import Class, Assignment, Criteria
+    class_obj = Class.query.getor_404(class_id)
+    logger.debug(f"Creating assignment for class {class_id}")
+
+    # Check if current user is the teacher of this class
+    if class_obj.teacher_id != current_user.id:
+        flash('You do not have permission to create assignments for this class.', 'danger')
+        return redirect(url_for('index'))
+
+    form = AssignmentForm()
+    logger.debug(f"Request method: {request.method}")
+    logger.debug(f"Form data: {request.form}")
+
+    if request.method == 'POST':
+        # Get all criteria descriptions from the form
+        criteria_descriptions = request.form.getlist('criteria-description[]')
+        logger.debug(f"Received criteria: {criteria_descriptions}")
+
+        if not criteria_descriptions:
+            flash('Please add at least one success criterion.', 'danger')
+            return render_template('create_assignment.html', form=form, class_obj=class_obj)
+
+        if form.validate():
+            try:
+                # Handle custom genre
+                genre = form.genre.data
+                if genre == 'custom' and form.custom_genre.data:
+                    genre = form.custom_genre.data
+
+                assignment = Assignment(
+                    title=form.title.data,
+                    curriculum=form.curriculum.data,
+                    genre=genre,
+                    class_id=class_id
+                )
+                db.session.add(assignment)
+                db.session.commit()
+                logger.debug(f"Created assignment with ID: {assignment.id}")
+
+                # Add criteria
+                for description in criteria_descriptions:
+                    if description.strip():
+                        criteria = Criteria(
+                            description=description,
+                            assignment_id=assignment.id
+                        )
+                        db.session.add(criteria)
+
+                db.session.commit()
+                logger.debug("Successfully saved criteria")
+                flash('Assignment created successfully!', 'success')
+                return redirect(url_for('assignments'))
+            except Exception as e:
+                logger.error(f"Error creating assignment: {str(e)}")
+                db.session.rollback()
+                flash('Error creating assignment. Please try again.', 'danger')
+        else:
+            logger.debug(f"Form validation failed. Errors: {form.errors}")
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f'{field}: {error}', 'danger')
+
+    return render_template('create_assignment.html', form=form, class_obj=class_obj)
+
+@app.route('/assignment/<int:assignment_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_assignment(assignment_id):
+    from models import Assignment, Class, Criteria
+
+    # Get the assignment and verify ownership
+    assignment = Assignment.query.get_or_404(assignment_id)
+    if assignment.class_group.teacher_id != current_user.id:
+        flash('You do not have permission to edit this assignment.', 'danger')
+        return redirect(url_for('assignments'))
+
+    form = AssignmentForm(obj=assignment)
+
+    if request.method == 'POST':
+        # Get all criteria descriptions from the form
+        criteria_descriptions = request.form.getlist('criteria-description[]')
+        logger.debug(f"Received criteria: {criteria_descriptions}")
+
+        if not criteria_descriptions:
+            flash('Please add at least one success criterion.', 'danger')
+            return render_template('edit_assignment.html', form=form, assignment=assignment)
+
+        if form.validate():
+            try:
+                # Update assignment details
+                assignment.title = form.title.data
+                assignment.description = form.description.data
+                assignment.curriculum = form.curriculum.data
+
+                # Handle custom genre
+                genre = form.genre.data
+                if genre == 'custom' and form.custom_genre.data:
+                    genre = form.custom_genre.data
+                assignment.genre = genre
+
+                # Clear existing criteria
+                Criteria.query.filter_by(assignment_id=assignment.id).delete()
+
+                # Add new criteria
+                for description in criteria_descriptions:
+                    if description.strip():
+                        criteria = Criteria(
+                            description=description,
+                            assignment_id=assignment.id
+                        )
+                        db.session.add(criteria)
+
+                db.session.commit()
+                flash('Assignment updated successfully!', 'success')
+                return redirect(url_for('assignments'))
+
+            except Exception as e:
+                logger.error(f"Error updating assignment: {str(e)}")
+                db.session.rollback()
+                flash('Error updating assignment. Please try again.', 'danger')
+        else:
+            for field, errors in form.errors.items():
+                for error in errors:
+                    flash(f'{field}: {error}', 'danger')
+
+    return render_template('edit_assignment.html', form=form, assignment=assignment)
+
+@app.route('/process', methods=['POST'])
+@login_required
+def process_images_ocr():
+    try:
+        if 'images' not in request.files:
+            return jsonify({'error': 'No files uploaded'}), 400
+
+        files = request.files.getlist('images')
+        student_id = request.form.get('student_id')
+        assignment_id = request.form.get('assignment_id')
+
+        if not student_id:
+            return jsonify({'error': 'No student selected'}), 400
+
+        from models import Student, Writing, Assignment, Criteria, CriteriaMark
+        import io
+        from PIL import Image, ImageEnhance, ImageFilter
+        import asyncio
+        import concurrent.futures
+
+        student = Student.query.get(student_id)
+        if not student or student.class_group.teacher_id != current_user.id:
+            return jsonify({'error': 'Invalid student selected'}), 403
+
+        # Get assignment and year group information to customize processing
+        assignment = None
+        is_young_writer = False
+        if assignment_id:
+            assignment = Assignment.query.get(assignment_id)
+            if assignment and assignment.class_group and "year" in assignment.class_group.year_group.lower():
+                year_group = assignment.class_group.year_group.lower()
+                if any(y in year_group for y in ["1", "2", "3", "4", "reception", "ks1"]):
+                    is_young_writer = True
+
+        # Helper function to preprocess image for better OCR
+        def preprocess_image(file_data):
+            try:
+                # Open image from bytes
+                img = Image.open(io.BytesIO(file_data))
+
+                # Convert to RGB if needed
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+
+                # Enhance image for better text extraction
+                enhancer = ImageEnhance.Contrast(img)
+                img = enhancer.enhance(1.5)  # Increase contrast
+
+                # Sharpen for clearer text edges
+                img = img.filter(ImageFilter.SHARPEN)
+
+                # Special processing for young children's handwriting
+                if is_young_writer:
+                    # Additional contrast - helps with light pencil marks
+                    enhancer = ImageEnhance.Contrast(img)
+                    img = enhancer.enhance(1.8)
+
+                    # Brightness adjustment - helps with faded writing
+                    bright_enhancer = ImageEnhance.Brightness(img)
+                    img = bright_enhancer.enhance(1.1)
+
+                # Save to bytes
+                output = io.BytesIO()
+                img.save(output, format='JPEG', quality=95)
+                return output.getvalue()
+            except Exception as e:
+                logger.error(f"Image preprocessing error: {str(e)}")
+                return file_data  # Return original data if processing fails
+
+        # Process images in parallel for speed
+        def process_single_image(file):
+            if file.filename == '':
+                return None
+
+            if not allowed_file(file.filename):
+                return None
+
+            # Read image data
+            img_bytes = file.read()
+
+            # Preprocess image
+            processed_img_bytes = preprocess_image(img_bytes)
+
+            # Encode for API
+            base64_image = encode_image_to_base64(processed_img_bytes)
+
+            # Customize system prompt based on writer age
+            system_prompt = "You are an expert at transcribing handwritten text. Your task is to transcribe the text exactly as it appears, preserving all original formatting, spacing, and line breaks."
+
+            if is_young_writer:
+                system_prompt = """You are an expert at transcribing children's handwritten text with specialized skills in:
+1. Decoding early-stage handwriting with developing letter formation
+2. Understanding phonetic spelling common in younger children
+3. Recognizing reversed letters (b/d, p/q) and mixed case
+4. Interpreting text with unconventional spacing and alignment
+
+Transcribe EXACTLY as written, preserving all spelling mistakes and formatting."""
+
+            # Call OpenAI Vision API for text extraction
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": system_prompt
+                    },
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Transcribe this handwritten text exactly as it appears."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=1500,
+                temperature=0.2  # Lower temperature for more consistent extraction
+            )
+
+            # Extract text from response
+            return response.choices[0].message.content.strip()
+
+        # Process all images in order while still using parallel processing
+        futures_list = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(files), 3)) as executor:
+            # Submit all tasks and keep track of their order
+            for file in files:
+                futures_list.append(executor.submit(process_single_image, file))
+
+            # Wait for all tasks to complete and collect results in original order
+            combined_text = []
+            for future in futures_list:
+                result = future.result()
+                if result:
+                    combined_text.append(result)
+
+        if not combined_text:
+            return jsonify({'error': 'No text could be extracted from the images'}), 400
+
+        # Combine all extracted text with newlines between pages
+        final_text = "\n\nPage Break\n\n".join(combined_text)
+
+        # Get the assignment if specified
+        assignment = None
+        if assignment_id:
+            assignment = Assignment.query.get(assignment_id)
+            if not assignment or assignment.class_id != student.class_id:
+                return jsonify({'error': 'Invalid assignment selected'}), 403
+
+        try:
+            # Get writing analysis based on the combined text
+            # Use the first image for visual analysis since OpenAI doesn't support multiple images in one request
+            first_image = files[0]
+            first_image.seek(0)  # Reset file pointer
+            first_image_bytes = first_image.read()
+            first_image_base64 = encode_image_to_base64(first_image_bytes)
+
+            analysis_response = analyze_writing(first_image_base64, assignment)
+
+            if analysis_response:
+                age_estimate = analysis_response["age"]
+                feedback = analysis_response["feedback"]
+
+                # Clean up the feedback format
+                feedback = feedback.replace('WRITING AGE:', '').strip()  # Remove writing age header
+
+                # Extract strengths and areas for development, excluding general comments
+                sections = feedback.split('\n\n')
+                strengths = next((s for s in sections if 'Strengths' in s), '')
+                development = next((s for s in sections if 'Areas for Development' in s), '')
+
+                # Combine only strengths and development sections
+                feedback = f"{strengths}\n\n{development}".strip()
+
+                # Clean up formatting
+                feedback = feedback.replace('**Key', '')  # Remove "Key" prefix
+                feedback = feedback.replace('**', '')  # Remove bold markers
+                feedback = feedback.replace('ize', 'ise')  # Convert to UK English
+                feedback = feedback.replace('yze', 'yse')
+            else:
+                age_estimate = "0 years 0 months"
+                feedback = "Feedback unavailable"
+
+            # Save the writing sample
+            writing_sample = Writing(
+                filename=files[0].filename,  # Store first filename as reference
+                text_content=final_text,
+                writing_age=age_estimate,
+                feedback=feedback,
+                student_id=student_id,
+                assignment_id=assignment_id if assignment_id else None
+            )
+            db.session.add(writing_sample)
+            db.session.commit()
+
+            # Check if this is the user's first analysis and tag in Mailchimp
+            try:
+                writing_count = Writing.query.filter_by(user_id=current_user.id).count()
+                if writing_count == 0:  # This is their first writing sample
+                    tag_user_first_analysis(current_user.email)
+                    logger.info(f"Tagged user {current_user.email} for first analysis in Mailchimp")
+            except Exception as e:
+                logger.error(f"Failed to tag user for first analysis in Mailchimp: {str(e)}")
+                # Don't let Mailchimp errors affect the analysis process
+
+            # Initialise criteria_marks list
+            criteria_marks = []
+
+            # Process criteria marks if this is an assignment submission
+            if assignment:
+                # Create a system message that includes the criteria
+                criteria_prompt = """You are an expert teacher evaluating a writing sample against specific success criteria.
+
+For each criterion, you must evaluate CONSISTENTLY using these specific scoring guidelines:
+
+Score 0 = Not met:
+- The required skill/element is completely absent
+- No evidence of attempting the criterion
+- Significant errors that impede understanding
+
+Score 1 = Partially met:
+- The skill/element is present but inconsistent
+- Basic or limited demonstration of the criterion
+- Some errors but meaning is generally clear
+
+Score 2 = Confidently used:
+- Consistent and effective use throughout
+- Clear evidence of mastery of the criterion
+- Minimal errors that don't impact understanding
+
+IMPORTANT SCORING RULES:
+1. Be consistent - similar writing should receive similar scores
+2. Focus on evidence - cite specific examples from the text
+3. Consider age-appropriate expectations
+4. Score each criterion independently
+5. Avoid being influenced by overall impression
+
+Criteria to evaluate:
+"""
+                for criterion in assignment.criteria:
+                    criteria_prompt += f"- {criterion.description}\n"
+
+                criteria_prompt += """
+Analyze the text thoroughly and respond with a JSON object in this exact format:
+{
+    "evaluations": [
+        {
+            "criterion": "exact criterion text",
+            "score": number (0, 1, or 2),
+            "justification": "MUST include specific examples from the text that justify this score"
+        }
+    ]
+}
+
+For each criterion, your justification MUST:
+1. Quote specific examples from the text
+2. Explain why these examples merit the given score
+3. Reference the scoring guidelines above"""
+
+                # Get criteria evaluation from OpenAI
+                try:
+                    logger.debug(f"Evaluating text against criteria for assignment {assignment.id}")
+                    criteria_response = client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": criteria_prompt
+                            },
+                            {
+                                "role": "user",
+                                "content": f"Please evaluate this writing sample against the provided criteria:\n\n{final_text}"
+                            }
+                        ],
+                        response_format={"type": "json_object"}
+                    )
+
+                    # Parse scores and save criteria marks
+                    logger.debug("Processing criteria evaluation response")
+                    response_data = json.loads(criteria_response.choices[0].message.content)
+                    evaluations = response_data.get('evaluations', [])
+                    logger.debug(f"Received evaluations: {evaluations}")
+
+                    # Clear previous criteria marks for this writing sample
+                    CriteriaMark.query.filter_by(writing_id=writing_sample.id).delete()
+
+                    # Process each criterion and its evaluation
+                    for criterion, evaluation in zip(assignment.criteria, evaluations):
+                        # Ensure score is within valid range (0-2)
+                        score = min(2, max(0, int(evaluation.get('score',0))))
+                        logger.debug(f"Processing criterion: {criterion.description}, score: {score}")
+
+                        mark = CriteriaMark(
+                            writing_id=writing_sample.id,
+                            criteria_id=criterion.id,
+                            score=score
+                        )
+                        db.session.add(mark)
+                        criteria_marks.append({
+                            'criteria': criterion.description,
+                            'score': score,
+                            'justification': evaluation.get('justification', '')
+                        })
+
+                    # Calculate and save total marks percentage
+                    total_marks = len(writing_sample.criteria_marks)
+                    if total_marks > 0:
+                        total_score = sum(mark.score for mark in writing_sample.criteria_marks)
+                        percentage = (total_score / (total_marks * 2)) * 100
+                        writing_sample.total_marks_percentage = percentage
+
+                    db.session.commit()
+                    logger.debug(f"Saved criteria marks: {criteria_marks}")
+
+                except Exception as e:
+                    logger.error(f"Error processing criteria marks: {str(e)}")
+                    db.session.rollback()
+                    # Initialise empty criteria marks if evaluation fails
+                    criteria_marks = []
+
+            return jsonify({
+                'text': final_text,
+                'writing_age': age_estimate,
+                'feedback': feedback,
+                'writing_id': writing_sample.id,  # Add writing_id to response
+                'criteria_marks': criteria_marks
+            })
+
+        except Exception as e:
+            logger.error(f"Error processing image: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    except Exception as e:
+        logger.error(f"Error processing image: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/submit_feedback', methods=['POST'])
+@login_required
+def submit_feedback():
+    try:
+        logger.debug("Received feedback submission")
+        data = request.get_json()
+        writing_id = data.get('writing_id')
+
+        if not writing_id:
+            logger.error("Writing ID missing from feedback submission")
+            return jsonify({'error': 'Writing ID is required'}), 400
+
+        from models import Writing, AnalysisFeedback, Student
+        writing = Writing.query.get_or_404(writing_id)
+        student = Student.query.get(writing.student_id)
+
+        # Verify permission (teacher of the student's class)
+        if student.class_group.teacher_id != current_user.id:
+            logger.warning(f"Unauthorized feedback submission attempt for writing {writing_id}")
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        # Create feedback record
+        feedback = AnalysisFeedback(
+            writing_id=writing_id,
+            is_helpful=data.get('is_helpful', 'false').lower() == 'true',
+            writing_age_accurate=data.get('writing_age_accurate') == 'true',
+            strengths_accurate=data.get('strengths_accurate') == 'true',
+            development_accurate=data.get('development_accurate') == 'true',
+            criteria_accurate=data.get('criteria_accurate') == 'true',
+            comment=data.get('comment')
+        )
+
+        db.session.add(feedback)
+        db.session.commit()
+        logger.info(f"Successfully saved feedback for writing {writing_id}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Feedback submitted successfully',
+            'feedback_id': feedback.id
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error submitting feedback: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to submit feedback'}), 500
+
+@app.route('/update_criteria_marks', methods=['POST'])
+@login_required
+def update_criteria_marks():
+    try:
+        logger.debug("Received criteria marks update")
+        data = request.get_json()
+        writing_id = data.get('writing_id')
+        updated_marks = data.get('updated_marks')
+
+        if not writing_id or not updated_marks:
+            logger.error("Writing ID or updated marks missing from request")
+            return jsonify({'error': 'Writing ID and updated marks are required'}), 400
+
+        from models import Writing, CriteriaMark, Student
+        writing = Writing.query.get_or_404(writing_id)
+        student = Student.query.get(writing.student_id)
+
+        # Verify permission (teacher of the student's class)
+        if student.class_group.teacher_id != current_user.id:
+            logger.warning(f"Unauthorized marks update attempt for writing {writing_id}")
+            return jsonify({'error': 'Unauthorized'}), 403
+
+        # Get existing criteria marks
+        criteria_marks = CriteriaMark.query.filter_by(writing_id=writing_id).all()
+
+        if len(criteria_marks) != len(updated_marks):
+            logger.error(f"Mismatch in criteria marks count: DB={len(criteria_marks)}, Request={len(updated_marks)}")
+            return jsonify({'error': 'Criteria marks count mismatch'}), 400
+
+        # Update marks in database
+        for update in updated_marks:
+            index = update.get('criteria_index')
+            new_score = update.get('score')
+
+            if index < len(criteria_marks) and 0 <= new_score <= 2:
+                criteria_marks[index].score = new_score
+            else:
+                logger.warning(f"Invalid index or score: index={index}, score={new_score}")
+
+        # Calculate and store total marks percentage
+        total_marks = len(criteria_marks)
+        if total_marks > 0:
+            total_score = sum(mark.score for mark in criteria_marks)
+            # Max score per criterion is 2, so maximum possible score is total_marks * 2
+            percentage = (total_score / (total_marks * 2)) * 100
+            writing.total_marks_percentage = percentage
+            logger.info(f"Calculated total marks percentage: {percentage}%")
+
+        db.session.commit()
+        logger.info(f"Successfully updated criteria marks for writing {writing_id}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Criteria marks updated successfully'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error updating criteria marks: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': f'Failed to update criteria marks: {str(e)}'}), 500
+
+@app.route('/add_class', methods=['POST'])
+@login_required
+def add_class():
+    from forms import ClassForm
+    form = ClassForm()
+    if form.validate_on_submit():
+        from models import Class
+        new_class = Class(
+            name=form.name.data,
+            year_group=form.year_group.data,
+            teacher_id=current_user.id
+        )
+        db.session.add(new_class)
+        db.session.commit()
+        flash('Class added successfully!', 'success')
+    return redirect(url_for('index'))
+
+
+    # Teacher activity analysis
+    teacher_data = db.session.query(
+        User.id,
+        User.name,
+        User.email,
+        User.school_name,
+        func.count(Writing.id).label('writings_count'),
+        func.count(distinct(Class.id)).label('classes_count'),
+        func.count(distinct(Student.id)).label('students_count'),
+        func.max(Writing.created_at).label('last_activity')
+    ).join(Class, User.id == Class.teacher_id, isouter=True) \
+     .join(Student, Class.id == Student.class_id, isouter=True) \
+     .join(Writing, Student.id == Writing.student_id, isouter=True) \
+     .group_by(User.id) \
+     .order_by(desc('writings_count')) \
+     .limit(10) \
+     .all()
+
+    top_teachers = []
+    teacher_names = []
+    teacher_writing_counts = []
+
+    for teacher in teacher_data:
+        top_teachers.append({
+            'id': teacher.id,
+            'name': teacher.name,
+            'email': teacher.email,
+            'school_name': teacher.school_name or 'Not specified',
+            'writings_count': teacher.writings_count,
+            'classes_count': teacher.classes_count,
+            'students_count': teacher.students_count,
+            'last_activity': teacher.last_activity.strftime('%Y-%m-%d %H:%M') if teacher.last_activity else 'N/A'
+        })
+        teacher_names.append(teacher.name)
+        teacher_writing_counts.append(teacher.writings_count)
+
+    # AI analysis feedback metrics
+    feedback_data = db.session.query(
+        func.count(AnalysisFeedback.id).label('total_feedback'),
+        func.sum(case((AnalysisFeedback.is_helpful == True, 1), else_=0)).label('helpful_count'),
+        func.sum(case((AnalysisFeedback.writing_age_accurate == True, 1), else_=0)).label('writing_age_accurate'),
+        func.sum(case((AnalysisFeedback.strengths_accurate == True, 1), else_=0)).label('strengths_accurate'),
+        func.sum(case((AnalysisFeedback.development_accurate == True, 1), else_=0)).label('development_accurate'),
+        func.sum(case((AnalysisFeedback.criteria_accurate == True, 1), else_=0)).label('criteria_accurate')
+    ).first()
+
+    total_feedback = feedback_data.total_feedback if feedback_data else 0
+    helpful_count = feedback_data.helpful_count if feedback_data else 0
+    not_helpful_count = total_feedback - helpful_count if total_feedback else 0
+    no_feedback_count = Writing.query.count() - total_feedback
+
+    writing_age_accurate_count = feedback_data.writing_age_accurate if feedback_data else 0
+    strengths_accurate_count = feedback_data.strengths_accurate if feedback_data else 0
+    development_accurate_count = feedback_data.development_accurate if feedback_data else 0
+    criteria_accurate_count = feedback_data.criteria_accurate if feedback_data else 0
+
+    # Submissions over time (last 30 days)
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=30)
+
+    # Get submissions per day
+    time_data = db.session.query(
+        func.date(Writing.created_at).label('date'),
+        func.count(Writing.id).label('count')
+    ).filter(Writing.created_at >= start_date) \
+     .group_by(func.date(Writing.created_at)) \
+     .order_by('date') \
+     .all()
+
+    date_labels = []
+    submission_counts = []
+
+    # Create a dictionary with all dates in the range
+    current_date = start_date
+    date_dict = {}
+    while current_date <= end_date:
+        date_str = current_date.strftime('%Y-%m-%d')
+        date_dict[date_str] = 0
+        date_labels.append(date_str)
+        current_date += timedelta(days=1)
+
+    # Fill in the actual counts
+    for item in time_data:
+        date_str = item.date.strftime('%Y-%m-%d')
+        date_dict[date_str] = item.count
+
+    # Convert to list preserving order
+    submission_counts = [date_dict[date] for date in date_labels]
+
+    return render_template(
+        'admin_dashboard.html',
+        metrics=metrics,
+        top_teachers=top_teachers,
+        teacher_names=teacher_names,
+        teacher_writing_counts=teacher_writing_counts,
+        total_feedback=total_feedback,
+        helpful_count=helpful_count,
+        not_helpful_count=not_helpful_count,
+        no_feedback_count=no_feedback_count,
+        writing_age_accurate_count=writing_age_accurate_count,
+        strengths_accurate_count=strengths_accurate_count,
+        development_accurate_count=development_accurate_count,
+        criteria_accurate_count=criteria_accurate_count,
+        date_labels=date_labels,
+        submission_counts=submission_counts
+    )
+
+@app.route('/save_to_wagoll', methods=['POST'])
+@login_required
+def save_to_wagoll():
+    """Save a writing sample as a WAGOLL example from index page."""
+    try:
+        data = request.get_json()
+        title = data.get('title')
+        content = data.get('content')
+        explanations = data.get('explanations', '')
+        is_public = data.get('is_public', False)
+        writing_id = data.get('writing_id')
+        assignment_id = data.get('assignment_id')
+
+        logger.debug(f"WAGOLL save request received: title={title}, content length={len(content) if content else 'None'}")
+
+        if not title or not content:
+            logger.error(f"Missing required fields: title={bool(title)}, content={bool(content)}")
+            return jsonify({'success': False, 'error': 'Title and content are required'}), 400
+
+        # Import the model 
+        from models import WagollExample, Writing
+
+        # If we have a writing ID but no content, try to get content from the writing sample
+        if writing_id and not content and Writing.query.get(writing_id):
+            writing = Writing.query.get(writing_id)
+            if writing and writing.text_content:
+                content = writing.text_content
+                logger.debug(f"Retrieved content from writing ID {writing_id}")
+
+        # Double-check content after potential retrieval
+        if not content:
+            logger.error("Content still missing after attempting to retrieve from writing_id")
+            return jsonify({'success': False, 'error': 'Content isrequired'}), 400
+
+        # Create the WAGOLL example
+        example = WagollExample(
+            title=title,
+            content=content,
+            explanations=explanations,
+            is_public=is_public,
+            assignment_id=assignment_id,
+            teacher_id=current_user.id,
+            writing_id=writing_id
+        )
+
+        db.session.add(example)
+        db.session.commit()
+        logger.debug(f"WAGOLL example saved successfully with ID: {example.id}")
+
+        return jsonify({
+            'success': True,
+            'id': example.id
+        })
+
+    except Exception as e:
+        logger.error(f"Error saving WAGOLL from index: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Student portfolio route
+@app.route('/student/<int:student_id>/portfolio')
+@login_required
+def student_portfolio(student_id):
+    """Display a student's portfolio with all writing samples and analytics."""
+    from models import Student, Writing, Assignment
+
+    student = Student.query.get_or_404(student_id)
+
+    # Check if current user is the teacher of this student's class
+    if student.class_group.teacher_id != current_user.id:
+        flash('You do not have permission to view this portfolio.', 'danger')
+        return redirect(url_for('index'))
+
+    # Get all writing samples for this student
+    writing_samples = Writing.query.filter_by(student_id=student_id).order_by(Writing.created_at.desc()).all()
+
+    # Debug: Check if criteria_marks are loaded
+    for sample in writing_samples:
+        print(f"Sample ID: {sample.id}, Criteria marks count: {len(sample.criteria_marks) if sample.criteria_marks else 0}")
+        if sample.criteria_marks:
+            for mark in sample.criteria_marks:
+                print(f"  - Mark ID: {mark.id}, Score: {mark.score}")
+
+    # Get all assignments for this student's class
+    assignments = Assignment.query.filter_by(class_id=student.class_id).all()
+
+    # Calculate average criteria met percentage
+    total_criteria_scores = 0
+    total_criteria_count = 0
+
+    for sample in writing_samples:
+        if sample.criteria_marks:
+            total_criteria_count += len(sample.criteria_marks)
+            total_criteria_scores += sum(mark.score for mark in sample.criteria_marks)
+
+    average_criteria_met = None
+    if total_criteria_count > 0:
+        # Each criterion can have max score of 2, so divide by 2 then multiply by 100 for percentage
+        average_criteria_met = (total_criteria_scores / (total_criteria_count * 2)) * 100
+
+    # Determine progress rating based on writing age vs. actual age and criteria met
+    progress_rating = None
+    age_differences = []  # Store age differences for each writing sample
+
+    if writing_samples:
+        for sample in writing_samples:
+            if sample.writing_age:
+                try:
+                    # Extract numeric part from writing age string (e.g. "10.2 years" -> 10.2)
+                    writing_age_value = float(sample.writing_age.split()[0])
+
+                    # Calculate student's age in years
+                    today = datetime.now().date()
+                    birth_date = student.date_of_birth
+                    age_years = (today - birth_date).days / 365.25
+
+                    # Calculate difference
+                    age_difference = round(writing_age_value - age_years, 1)
+
+                    # Store age difference for chart data
+                    age_differences.append({
+                        'sample_id': sample.id,
+                        'date': sample.created_at,
+                        'filename': sample.filename,
+                        'writing_age': writing_age_value,
+                        'student_age': age_years,
+                        'difference': age_difference,
+                        'assignment': sample.assignment.title if sample.assignment else 'No Assignment'
+                    })
+                except (ValueError, AttributeError, IndexError):
+                    # Handle cases where writing_age format is invalid
+                    continue
+
+        # Determine rating based on the most recent samples (up to 3)
+        if age_differences:
+            # Sort by date, newest first
+            age_differences.sort(key=lambda x: x['date'], reverse=True)
+            latest_differences = age_differences[:min(3, len(age_differences))]
+            average_age_difference = sum(item['difference'] for item in latest_differences) / len(latest_differences)
+
+            # Determine rating
+            if average_age_difference >= 3:
+                progress_rating = "Excellent"
+            elif average_age_difference >= 2:
+                progress_rating = "Very Good"
+            elif average_age_difference >= 1:
+                progress_rating = "Good"
+            elif average_age_difference >= 0:
+                progress_rating = "Satisfactory"
+            else:
+                progress_rating = "Needs Support"
+
+    # Prepare chart data
+    chart_data = {
+        'labels': [],
+        'datasets': [{
+            'label': 'Assignment Score',
+            'data': [],
+            'backgroundColor': 'rgba(75, 192, 192, 0.2)',
+            'borderColor': 'rgba(75, 192, 192, 1)',
+            'borderWidth': 2,
+            'pointRadius': 5,
+            'pointBackgroundColor': 'rgba(75, 192, 192, 1)',
+            'fill': True
+        }]
+    }
+
+    # Prepare age comparison chart data
+    age_chart_data = {
+        'labels': [],
+        'datasets': [{
+            'label': 'Writing Age',
+            'data': [],
+            'borderColor': 'rgba(54, 162, 235, 1)',
+            'backgroundColor': 'rgba(54, 162, 235, 0.2)',
+            'borderWidth': 2,
+            'pointRadius': 5,
+            'fill': False
+        }, {
+            'label': 'Actual Age',
+            'data': [],
+            'borderColor': 'rgba(255, 99, 132, 1)',
+            'backgroundColor': 'rgba(255, 99, 132, 0.2)',
+            'borderWidth': 2,
+            'pointRadius': 5,
+            'fill': False
+        }]
+    }
+
+    # Format data for the charts
+    for sample in reversed(writing_samples):  # Oldest to newest for timeline
+        # Prepare data for assignment scores chart
+        chart_data['labels'].append(f"{sample.created_at.strftime('%d %b %Y')}")
+
+        # Calculate score percent for this sample
+        if sample.criteria_marks:
+            total_marks = len(sample.criteria_marks)
+            marks_score = sum(mark.score for mark in sample.criteria_marks)
+            score_percent = (marks_score / (total_marks * 2)) * 100
+            chart_data['datasets'][0]['data'].append(score_percent)
+        else:
+            chart_data['datasets'][0]['data'].append(0)
+
+        # Prepare data for age comparison chart
+        if sample.writing_age:
+            try:
+                writing_age_value = float(sample.writing_age.split()[0])
+
+                today = datetime.now().date()
+                birth_date = student.date_of_birth
+                age_years = (today - birth_date).days / 365.25
+
+                age_chart_data['labels'].append(f"{sample.created_at.strftime('%d %b %Y')}")
+                age_chart_data['datasets'][0]['data'].append(writing_age_value)
+                age_chart_data['datasets'][1]['data'].append(age_years)
+            except (ValueError, AttributeError, IndexError):
+                continue
+
+    # Get previous and next students for navigation
+    class_students = Student.query.filter_by(class_id=student.class_id).order_by(Student.first_name).all()
+    current_index = next((i for i, s in enumerate(class_students) if s.id == student.id), None)
+
+    prev_student = None
+    next_student = None
+
+    if current_index is not None and len(class_students) > 1:
+        prev_student = class_students[current_index - 1] if current_index > 0 else class_students[-1]
+        next_student = class_students[(current_index + 1) % len(class_students)]
+
+    return render_template(
+        'student_portfolio_new_temp.html',
+        student=student,
+        writing_samples=writing_samples,
+        assignments=assignments,
+        average_criteria_met=average_criteria_met,
+        progress_rating=progress_rating,
+        prev_student=prev_student,
+        next_student=next_student,
+        chart_data=json.dumps(chart_data),
+        age_chart_data=json.dumps(age_chart_data),
+        age_differences=age_differences
+    )
+
+@app.route('/writing/<int:writing_id>/update_filename', methods=['POST'])
+@login_required
+def update_writing_filename(writing_id):
+    from models import Writing, Student
+
+    # Support both JSON and form data submissions
+    if request.is_json:
+        data = request.get_json()
+        new_filename = data.get('filename')
+    else:
+        new_filename = request.form.get('filename')
+
+    if not new_filename:
+        if request.is_json:
+            return jsonify({'error': 'Filename is required'}), 400
+        flash('Filename is required', 'warning')
+        return redirect(request.referrer or url_for('index'))
+
+    writing = Writing.query.get_or_404(writing_id)
+    student = Student.query.get(writing.student_id)
+
+    # Check if the current user is the teacher of this student's class
+    if student.class_group.teacher_id != current_user.id:
+        if request.is_json:
+            return jsonify({'error': 'Unauthorized'}), 403
+        flash('You do not have permission to update this filename', 'error')
+        return redirect(url_for('index'))
+
+    try:
+        writing.filename = new_filename
+        db.session.commit()
+
+        if request.is_json:
+            return jsonify({'success': True, 'filename': new_filename}), 200
+        return redirect(request.referrer or url_for('index'))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating writing filename: {str(e)}")
+
+        if request.is_json:
+            return jsonify({'error': 'Failed to update filename'}), 500
+        flash('Failed to update filename', 'error')
+        return redirect(request.referrer or url_for('index'))
+
+@app.route('/writing/<int:writing_id>/delete', methods=['GET', 'POST'])
+@login_required
+def delete_writing(writing_id):
+    from models import Writing, Student
+    writing = Writing.query.get_or_404(writing_id)
+    student = Student.query.get(writing.student_id)
+
+    # Check if the current user is the teacher of this student's class
+    if student.class_group.teacher_id != current_user.id:
+        if request.method == 'POST':
+            return jsonify({'error': 'Unauthorized'}), 403
+        flash('You do not have permission to delete this writing sample.', 'error')
+        return redirect(url_for('index'))
+
+    try:
+        # Store student ID before deleting writing
+        student_id = writing.student_id
+
+        db.session.delete(writing)
+        db.session.commit()
+
+        if request.method == 'POST':
+            return jsonify({'success': True}), 200
+
+        flash('Writing sample deleted successfully!', 'success')
+        # Redirect back to student portfolio instead of index
+        return redirect(url_for('student_portfolio', student_id=student_id))
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting writing sample: {str(e)}")
+
+        if request.method == 'POST':
+            return jsonify({'error': 'Failed to delete writing sample'}), 500
+
+        flash('Failed to delete writing sample.', 'error')
+        # Redirect back to student portfolio instead of index
+        return redirect(url_for('student_portfolio', student_id=student_id))
+
+@app.route('/assignments')
+@login_required
+def assignments():
+    return render_template('assignments.html')
+
+@app.route('/assignment/<int:assignment_id>/delete', methods=['POST'])
+@login_required
+def delete_assignment(assignment_id):
+    from models import Assignment
+    assignment = Assignment.query.get_or_404(assignment_id)
+
+    # Check if current user is the teacher of this class
+    if assignment.class_group.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        db.session.delete(assignment)
+        db.session.commit()
+        flash('Assignment deleted successfully!', 'success')
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        logger.error(f"Error deleting assignment: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed todelete assignment'}), 500
+
+@app.route('/class/<int:class_id>/delete', methods=['POST'])
+@login_required
+def delete_class(class_id):
+    from models import Class
+    class_obj = Class.query.get_or_404(class_id)
+
+    # Check if current user is the teacher of this class
+    if class_obj.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        # Use SQL to delete everything in the correct order
+        sql_queries = [
+            # First delete criteria marks
+            """DELETE FROM criteria_mark WHERE writing_id IN (
+                SELECT w.id FROM writing w
+                JOIN student s ON w.student_id = s.id
+                WHERE s.class_id = :class_id
+            );""",
+            # Delete criteria
+            """DELETE FROM criteria WHERE assignment_id IN (
+                SELECT id FROM assignment WHERE class_id = :class_id
+            );""",
+            # Delete writings
+            """DELETE FROM writing WHERE student_id IN (
+                SELECT id FROM student WHERE class_id = :class_id
+            );""",
+            # Delete assignments
+            "DELETE FROM assignment WHERE class_id = :class_id;",
+            # Delete students
+            "DELETE FROM student WHERE class_id = :class_id;",
+            # Finally delete the class
+            "DELETE FROM class WHERE id = :class_id;"
+        ]
+
+        for query in sql_queries:
+            db.session.execute(db.text(query), {'class_id': class_id})
+
+        db.session.commit()
+        flash('Class deleted successfully!', 'success')
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        logger.error(f"Error deleting class: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete class. Please ensure all related data is removed first.'}), 500
+
+
+
+@app.route('/writing/bulk_delete', methods=['POST'])
+@login_required
+def bulk_delete_writing():
+    from models import Writing, Student
+
+    # Handle form submissions (from modal form) or JSON requests
+    if request.is_json:
+        writing_ids = request.json.get('writing_ids', [])
+    else:
+        writing_ids = request.form.getlist('writing_ids')
+
+    if not writing_ids:
+        flash('No writing samples selected', 'warning')
+        return redirect(request.referrer or url_for('index'))
+
+    # Store the student_id for redirect after deletion
+    student_id = None
+
+    try:
+        # Get all writings
+        writings = Writing.query.filter(Writing.id.in_(writing_ids)).all()
+
+        if not writings:
+            flash('No matching writing samples found', 'warning')
+            return redirect(request.referrer or url_for('index'))
+
+        # Store the student_id for the first writing (assuming all are from the same student)
+        if writings:
+            student_id = writings[0].student_id
+
+        # Check permissions for each writing
+        for writing in writings:
+            student = Student.query.get(writing.student_id)
+            if not student or student.class_group.teacher_id != current_user.id:
+                flash('Unauthorized access to one or more writing samples', 'error')
+                return redirect(url_for('index'))
+            db.session.delete(writing)
+
+        db.session.commit()
+
+        # Different responses based on request type
+        if request.is_json:
+            return jsonify({'success': True}), 200
+        else:
+            flash(f'Successfully deleted {len(writings)} writing samples', 'success')
+            if student_id:
+                return redirect(url_for("student_portfolio", student_id=student_id))
+            return redirect(request.referrer or url_for('index'))
+
+    except Exception as e:
+        logger.error(f"Error bulk deleting writing samples: {str(e)}")
+        db.session.rollback()
+
+        if request.is_json:
+            return jsonify({'error': 'Failed to delete writing samples'}), 500
+        else:
+            flash('Failed to delete writing samples', 'error')
+            return redirect(request.referrer or url_for('index'))
+
+@app.route('/settings', methods=['GET', 'POST'])
+@login_required
+def settings():
+    form = SettingsForm()
+
+    if form.validate_on_submit():
+        try:
+            current_user.first_name = form.first_name.data
+            current_user.last_name = form.last_name.data
+            current_user.school_name = form.school_name.data
+
+            # Handle logo upload
+            if form.school_logo.data:
+                file = form.school_logo.data
+                if file and allowed_file(file.filename):
+                    # Open and resize the image
+                    img = Image.open(file)
+                    # Maintain aspect ratio while ensuring reasonable size
+                    img.thumbnail((200, 200))
+                    # Save to bytes
+                    img_byte_arr = io.BytesIO()
+                    img.save(img_byte_arr, format='PNG')
+                    img_byte_arr = img_byte_arr.getvalue()
+                    # Store as base64
+                    current_user.school_logo = base64.b64encode(img_byte_arr).decode('utf-8')
+
+            db.session.commit()
+            flash('Settings updated successfully!', 'success')
+            return redirect(url_for('settings'))
+        except Exception as e:
+            logger.error(f"Error updating settings: {str(e)}")
+            db.session.rollback()
+            flash('Error updating settings. Please try again.', 'danger')
+
+    return render_template('settings.html', form=form)
+
+@app.context_processor
+def inject_forms():
+    """Make forms available to all templates."""
+    from forms import ClassForm
+    return dict(class_form=ClassForm())
+
+@app.template_filter('index')
+@app.template_filter('find_index')
+def find_index(list_obj, value):
+    """Template filter to find index of value in list."""
+    try:
+        return list_obj.index(value)
+    except ValueError:
+        return 0
+
+@app.template_filter('mean')
+def calculate_mean(lst):
+    """Calculate mean of a list of numbers."""
+    try:
+        return sum(lst) / len(lst)
+    except (TypeError, ZeroDivisionError):
+        return 0
+
+@app.template_filter('nl2br')
+def nl2br(value):
+    """Convert newlines to <br> tags."""
+    if not value:
+        return ''
+    from markupsafe import Markup
+    return Markup(value.replace('\n', '<br>'))
+
+@app.route('/assignment/<int:assignment_id>/class-feedback')
+@login_required
+def get_class_feedback(assignment_id):
+    from models import Assignment, Writing, CriteriaMark
+
+    # Get the assignment and verify ownership
+    assignment = Assignment.query.get_or_404(assignment_id)
+    if assignment.class_group.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        # Collect submissions for only this specific assignment
+        submissions = Writing.query.filter_by(assignment_id=assignment_id).all()
+
+        if not submissions:
+            return jsonify({
+                'strengths': ['No submissions to analyze'],
+                'areas_for_development': ['No submissions to analyze'],
+                'practice_activities': ['No submissions to analyze']
+            })
+
+        # Limit analysis to manageable data to avoid rate limit errors
+        max_submissions = min(len(submissions), 10)  # Analyze at most 10 submissions
+        submissions = submissions[:max_submissions]
+
+        # Extract aggregate statistics rather than raw data
+        criteria_scores = {}
+        common_strengths = []
+        common_weaknesses = []
+        avg_writing_age = 0
+        writing_age_count = 0
+
+        for submission in submissions:
+            # Process writing age
+            if submission.writing_age:
+                try:
+                    # Try to extract years from writing age strings like "10 years 6 months"
+                    years_str = submission.writing_age.split(' years')[0]
+                    years = float(years_str)
+                    avg_writing_age += years
+                    writing_age_count += 1
+                except (ValueError, IndexError):
+                    pass
+
+            # Extract strengths/weaknesses from feedback
+            if submission.feedback:
+                feedback_parts = submission.feedback.split('\n\n')
+                if len(feedback_parts) >= 1:
+                    strengths = feedback_parts[0].replace('Strengths:', '').strip()
+                    for line in strengths.split('\n'):
+                        line = line.strip()
+                        if line.startswith('- '):
+                            common_strengths.append(line[2:])
+
+                if len(feedback_parts) >= 2:
+                    weaknesses = feedback_parts[1].replace('Areas for Development:', '').strip()
+                    for line in weaknesses.split('\n'):
+                        line = line.strip()
+                        if line.startswith('- '):
+                            common_weaknesses.append(line[2:])
+
+            # Aggregate criteria scores
+            if submission.criteria_marks:
+                for mark in submission.criteria_marks:
+                    if mark.criteria.description not in criteria_scores:
+                        criteria_scores[mark.criteria.description] = {
+                            'total': mark.score,
+                            'count': 1
+                        }
+                    else:
+                        criteria_scores[mark.criteria.description]['total'] += mark.score
+                        criteria_scores[mark.criteria.description]['count'] += 1
+
+        # Calculate average writing age
+        if writing_age_count > 0:
+            avg_writing_age = avg_writing_age / writing_age_count
+
+        # Calculate average criteria scores
+        avg_criteria = []
+        for criterion, data in criteria_scores.items():
+            avg_score = data['total'] / data['count']
+            avg_criteria.append({
+                'criterion': criterion,
+                'avg_score': avg_score
+            })
+
+        # Sort criteria by average score
+        avg_criteria.sort(key=lambda x: x['avg_score'])
+
+        # Create prompt for class analysis with summarized data
+        analysis_prompt = f"""Analyze this class's writing submissions for a specific assignment and provide exactly:
+
+1. Three clear class strengths
+2. Three specific areas for development
+3. Four practical practice activities
+
+Format your response as a JSON object with exactly these keys:
+{{
+    "strengths": [3 strength items],
+    "areas_for_development": [3 development items],
+    "practice_activities": [4 activity items]
+}}
+
+Assignment Details:
+Title: {assignment.title}
+Genre: {assignment.genre}
+Curriculum: {assignment.curriculum}
+Number of Submissions Analyzed: {max_submissions} (out of {len(submissions)})
+Average Writing Age: {avg_writing_age:.1f} years
+
+Remember:
+- Make each point specific and actionable
+- Base insights on the provided feedback and marks
+- Focus on patterns across the whole class for this specific assignment"""
+
+        # Get AI analysis using summarized data
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": analysis_prompt
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps({
+                        'highest_scoring_criteria': [c for c in avg_criteria[-3:] if c['avg_score'] > 1],
+                        'lowest_scoring_criteria': [c for c in avg_criteria[:3] if c['avg_score'] < 1],
+                        'common_strengths': common_strengths[:10],  # Limit to 10 items
+                        'common_weaknesses': common_weaknesses[:10],  # Limit to 10 items
+                        'avg_writing_age': avg_writing_age
+                    })
+                }
+            ],
+            response_format={"type": "json_object"}
+        )
+
+        # Parse the response
+        analysis = json.loads(response.choices[0].message.content)
+
+        # Ensure we have the expected keys with default values if missing
+        return jsonify({
+            'strengths': analysis.get('strengths', ['No strengths identified']),
+            'areas_for_development': analysis.get('areas_for_development', ['No areas identified']),
+            'practice_activities': analysis.get('practice_activities', ['No activities suggested'])
+        })
+
+    except Exception as e:
+        logger.error(f"Error generating class feedback: {str(e)}")
+        return jsonify({
+            'strengths': ['Error analyzing submissions'],
+            'areas_for_development': ['Error analyzing submissions'],
+            'practice_activities': ['Error analyzing submissions']
+        }), 500
+
+@app.route('/assignment/<int:assignment_id>/wagoll')
+@login_required
+def get_wagoll(assignment_id):
+    """Generate a 'What A Good One Looks Like' (WAGOLL) example for the assignment."""
+    from models import Assignment, Writing, CriteriaMark, Criteria
+
+    # Get the assignment and verify ownership
+    assignment = Assignment.query.get_or_404(assignment_id)
+    if assignment.class_group.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        # Collect all criteria for this assignment
+        criteria_list = Criteria.query.filter_by(assignment_id=assignment_id).all()
+
+        if not criteria_list:
+            return jsonify({
+                'title': assignment.title,
+                'exemplar': 'No success criteria found for this assignment.',
+                'explanations': ['Please add success criteria to generate a WAGOLL example.']
+            })
+
+        # Get top-scoring submissions
+        submissions = Writing.query.filter_by(assignment_id=assignment_id).all()
+
+        # Find the best examples for each criterion
+        best_examples = {}
+        for criterion in criteria_list:
+            best_score = -1
+            best_example = None
+
+            for submission in submissions:
+                for mark in submission.criteria_marks:
+                    if mark.criteria_id == criterion.id and mark.score > best_score:
+                        best_score = mark.score
+                        best_example = submission.text_content
+
+            if best_example:
+                best_examples[criterion.description] = {
+                    'score': best_score,
+                    'example': best_example
+                }
+
+        # Create the prompt for generating the WAGOLL
+        wagoll_prompt = f"""You are an expert educational writer who specializes in creating exemplary writing samples that demonstrate mastery of learning objectives.
+
+Task: Create a "What A Good One Looks Like" (WAGOLL) example for a {assignment.curriculum} curriculum {assignment.genre} writing assignment titled "{assignment.title}".
+
+This WAGOLL should:
+1. Exemplify mastery of all the success criteria
+2. Be age-appropriate (targeting {assignment.class_group.year_group} students)
+3. Showcase excellent writing techniques appropriate for this genre
+4. Be original but inspired by the best elements from student submissions
+
+Success Criteria:
+{chr(10).join([f"- {c.description}" for c in criteria_list])}
+
+Format your response as a JSON object with these keys:
+{{
+    "exemplar": "The complete example text",
+    "explanations": [
+        "3-5 specific points explaining why this is a good example",
+        "Including how it meets each success criterion"
+    ]
+}}
+
+Keep the exemplar text appropriate in length for {assignment.class_group.year_group} students (typically 250-500 words). Focus on quality over quantity."""
+
+        # Get AI to generate the WAGOLL
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {
+                    "role": "system",
+                    "content": wagoll_prompt
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps({
+                        'assignment': {
+                            'title': assignment.title,
+                            'genre': assignment.genre,
+                            'curriculum': assignment.curriculum,
+                            'year_group': assignment.class_group.year_group
+                        },
+                        'criteria': [c.description for c in criteria_list],
+                        'best_examples': best_examples
+                    })
+                }
+            ],
+            response_format={"type": "json_object"}
+        )
+
+        # Parse the response
+        wagoll = json.loads(response.choices[0].message.content)
+
+        # Return the WAGOLL with explanations
+        return jsonify({
+            'title': assignment.title,
+            'exemplar': wagoll.get('exemplar', 'Error generating example.'),
+            'explanations': wagoll.get('explanations', ['No explanations provided.'])
+        })
+
+    except Exception as e:
+        logger.error(f"Error generating WAGOLL: {str(e)}")
+        return jsonify({
+            'title': assignment.title if assignment else "Unknown Assignment",
+            'exemplar': 'Error generating the WAGOLL example.',
+            'explanations': [f'Error: {str(e)}']
+        }), 500
+
+@app.route('/assignment/<int:assignment_id>/wagoll_examples')
+@login_required
+def get_wagoll_examples(assignment_id):
+    """Get saved WAGOLL examples for an assignment."""
+    from models import Assignment, WagollExample
+
+    # Get the assignment and verify ownership
+    assignment = Assignment.query.get_or_404(assignment_id)
+    if assignment.class_group.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        # Get examples created by this teacher for this assignment
+        examples = WagollExample.query.filter_by(
+            assignment_id=assignment_id,
+            teacher_id=current_user.id
+        ).order_by(WagollExample.updated_at.desc()).all()
+
+        # Format response
+        response = {
+            'examples': [{
+                'id': example.id,
+                'title': example.title,
+                'updated_at': example.updated_at.isoformat(),
+                'is_public': example.is_public
+            } for example in examples]
+        }
+
+        return jsonify(response)
+
+    except Exception as e:
+        logger.error(f"Error getting WAGOLL examples: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/wagoll_example/<int:example_id>')
+@login_required
+def get_wagoll_example(example_id):
+    """Get a specific WAGOLL example."""
+    from models import WagollExample
+
+    # Get the example and verify ownership
+    example = WagollExample.query.get_or_404(example_id)
+    if example.teacher_id != current_user.id and not example.is_public:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        # Format response
+        response = {
+            'id': example.id,
+            'title': example.title,
+            'content': example.content,
+            'explanations': example.explanations,
+            'is_public': example.is_public,
+            'assignment_id': example.assignment_id,
+            'assignment_title': example.assignment.title if example.assignment else None,
+            'created_at': example.created_at.isoformat(),
+            'updated_at': example.updated_at.isoformat()
+        }
+
+        return jsonify(response)
+
+    except Exception as e:
+        logger.error(f"Error getting WAGOLL example: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/wagoll_example/save', methods=['POST'])
+@login_required
+def save_wagoll_example():
+    """Save a WAGOLL example."""
+    from models import WagollExample, Assignment
+
+    try:
+        data = request.get_json()
+        assignment_id = data.get('assignment_id')
+        title = data.get('title')
+        content = data.get('content')
+        explanations = data.get('explanations')
+        is_public = data.get('is_public', False)
+
+        if not title or not content:
+            return jsonify({'success': False, 'error': 'Title and content are required'}), 400
+
+        # If assignment_id is provided, verify ownership
+        if assignment_id:
+            assignment = Assignment.query.get(assignment_id)
+            if not assignment or assignment.class_group.teacher_id != current_user.id:
+                return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+        # Create the WAGOLL example
+        example = WagollExample(
+            title=title,
+            content=content,
+            explanations=explanations,
+            is_public=is_public,
+            assignment_id=assignment_id,
+            teacher_id=current_user.id
+        )
+
+        db.session.add(example)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'id': example.id
+        })
+
+    except Exception as e:
+        logger.error(f"Error saving WAGOLL example: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/wagoll_example/<int:example_id>/delete', methods=['POST'])
+@login_required
+def delete_wagoll_example(example_id):
+    """Delete a WAGOLL example."""
+    from models import WagollExample
+
+    # Get the example and verify ownership
+    example = WagollExample.query.get_or_404(example_id)
+    if example.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        db.session.delete(example)
+        db.session.commit()
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.error(f"Error deleting WAGOLL example: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/wagoll_library')
+@login_required
+def wagoll_library():
+    """View all WAGOLL examples in the teacher's library."""
+    from models import WagollExample
+
+    # Get all examples created by this teacher
+    my_examples = WagollExample.query.filter_by(
+        teacher_id=current_user.id
+    ).order_by(WagollExample.updated_at.desc()).all()
+
+    # Get public examples from other teachers
+    public_examples = WagollExample.query.filter(
+        WagollExample.teacher_id != current_user.id,
+        WagollExample.is_public == True
+    ).order_by(WagollExample.updated_at.desc()).all()
+
+    return render_template(
+        'wagoll_library.html',
+        my_examples=my_examples,
+        public_examples=public_examples
+    )
+
+@app.route('/class/<int:class_id>/export_data')
+@login_required
+def export_class_data(class_id):
+    from models import Class, Student, Writing, Assignment
+    class_obj = Class.query.get_or_404(class_id)
+
+    # Check if current user is the teacher of this class
+    if class_obj.teacher_id != current_user.id:
+        flash('You do not have permission to export data for this class.', 'danger')
+        return redirect(url_for('assignments'))
+
+    try:
+        # Create CSV in memory
+        output = StringIO()
+        writer = csv.writer(output)
+
+        # Write headers
+        writer.writerow([
+            'Student Name', 'Assignment Title', 'Submission Date',
+            'Writing Age', 'Total Score', 'Max Possible Score',
+            'Achievement Percentage', 'Strengths', 'Areas for Development'
+        ])
+
+        # Get all assignments for this class
+        assignments = Assignment.query.filterby(class_id=class_id).all()
+
+        # For each student
+        for student in class_obj.students:
+            # For each assignment
+            for assignment in assignments:
+                # Get the student's submission for this assignment
+                submission = Writing.query.filter_by(
+                    student_id=student.id,
+                    assignment_id=assignment.id
+                ).first()
+
+                if submission:
+                    # Calculate scores
+                    total_possible_marks = len(submission.criteria_marks) * 2
+                    achieved_marks = sum(mark.score for mark in submission.criteria_marks)
+                    percentage = round((achieved_marks / total_possible_marks * 100), 1) if total_possible_marks > 0 else 0
+
+                    # Extract strengths and areas for development
+                    feedback_parts = submission.feedback.split('\n\n') if submission.feedback else ['', '']
+                    strengths = feedback_parts[0].replace('Strengths:', '').strip() if len(feedback_parts) > 0 else ''
+                    development = feedback_parts[1].replace('Areas for Development:', '').strip() if len(feedback_parts) > 1 else ''
+
+                    # Write row
+                    writer.writerow([
+                        f"{student.first_name} {student.last_name}",
+                        assignment.title,
+                        submission.created_at.strftime('%Y-%m-%d'),
+                        submission.writing_age,
+                        achieved_marks,
+                        total_possible_marks,
+                        f"{percentage}%",
+                        strengths,
+                        development
+                    ])
+
+        # Prepare response
+        output.seek(0)
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename=class_{class_id}_performance_{datetime.now().strftime("%Y%m%d")}.csv'
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting class data: {str(e)}")
+        flash('Error exporting class data. Please try again.', 'danger')
+        return redirect(url_for('assignments'))
+
+# Portfolio export route temporarily removed
+@app.route('/student/<int:student_id>/export_portfolio')
+@login_required
+def export_student_portfolio(student_id):
+    from models import Student, Writing
+    from io import StringIO
+    import csv
+    from datetime import datetime
+    from flask import Response
+
+    student = Student.query.get_or_404(student_id)
+
+    # Check if current user is the teacher of this student's class
+    if student.class_group.teacher_id != current_user.id:
+        flash('You do not have permission to export this portfolio.', 'danger')
+        return redirect(url_for('index'))
+
+    try:
+        # Create CSV in memory
+        output = StringIO()
+        writer = csv.writer(output)
+
+        # Write headers
+        writer.writerow([
+            'Date', 'Assignment', 'Writing Age',
+            'Score', 'Max Score', 'Achievement %',
+            'Strengths', 'Areas for Development'
+        ])
+
+        # Get all writing samples
+        samples = Writing.query.filter_by(student_id=student_id).order_by(Writing.created_at.desc()).all()
+
+        for sample in samples:
+            # Calculate scores if it's an assignment submission
+            total_possible_marks = len(sample.criteria_marks) * 2 if sample.assignment_id else 0
+            achieved_marks = sum(mark.score for mark in sample.criteria_marks) if sample.assignment_id else 0
+            percentage = round((achieved_marks / total_possible_marks * 100), 1) if total_possible_marks > 0 else "N/A"
+
+            # Extract feedback sections
+            feedback_parts = sample.feedback.split('\n\n') if sample.feedback else ['', '']
+            strengths = feedback_parts[0].replace('Strengths:', '').strip() if len(feedback_parts) > 0 else ''
+            development = feedback_parts[1].replace('Areas for Development:', '').strip() if len(feedback_parts) > 1 else ''
+
+            # Write row
+            writer.writerow([
+                sample.created_at.strftime('%Y-%m-%d'),
+                sample.assignment.title if sample.assignment else 'Free Writing',
+                sample.writing_age,
+                achieved_marks if total_possible_marks > 0 else "N/A",
+                total_possible_marks if total_possible_marks > 0 else "N/A",
+                f"{percentage}%" if isinstance(percentage, (int, float)) else percentage,
+                strengths,
+                development
+            ])
+
+        # Prepare response
+        output.seek(0)
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename={student.first_name}_{student.last_name}_portfolio_{datetime.now().strftime("%Y%m%d")}.csv'
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting student portfolio: {str(e)}")
+        flash('Error exporting portfolio. Please try again.', 'danger')
+        return redirect(url_for("index"))
+
+@app.route('/writing/<int:writing_id>/print_report')
+@login_required
+def print_writing_report(writing_id):
+    from models import Writing, Student
+    writing = Writing.query.get_or_404(writing_id)
+    student = Student.query.get(writing.student_id)
+
+    # Check if the current user is the teacher of this student's class
+    if student.class_group.teacher_id != current_user.id:
+        flash('You do not have permission to view this report.', 'danger')
+        return redirect(url_for('index'))
+
+    # Get related data
+    total_possible_marks = len(writing.criteria_marks) * 2 if writing.assignment else 0
+    achieved_marks = sum(mark.score for mark in writing.criteria_marks) if writing.assignment else 0
+    percentage = round((achieved_marks / total_possible_marks * 100), 1) if total_possible_marks > 0 else 0
+
+    # Parse feedback
+    feedback_parts = writing.feedback.split('\n\n') if writing.feedback else ['', '']
+    strengths = feedback_parts[0].replace('Strengths:', '').strip() if len(feedback_parts) > 0 else ''
+    development = feedback_parts[1].replace('Areas for Development:', '').strip() if len(feedback_parts) > 1 else ''
+
+    # Calculate student age at time of writing
+    student_age = ((writing.created_at.date() - student.date_of_birth).days / 365.25)
+    student_age_str = f"{int(student_age)} years {int((student_age % 1) * 12)} months"
+
+    # Extract writing age
+    writing_age_str = writing.writing_age.replace('Estimated writing age:', '').strip()
+
+    # Create print-friendly page with A4 dimensions
+    return render_template(
+        'print_report.html',
+        writing=writing,
+        student=student,
+        total_marks=total_possible_marks,
+        achieved_marks=achieved_marks,
+        percentage=percentage,
+        strengths=strengths,
+        development=development,
+        student_age=student_age_str,
+        writing_age=writing_age_str
+    )
+
+@app.route('/view_classes/export/<int:class_id>')
+@login_required
+def export_class_overview(class_id):
+    from models import Class, Student, Writing
+    class_obj = Class.query.get_or_404(class_id)
+
+    # Check if current user is the teacher of this class
+    if class_obj.teacher_id != current_user.id:
+        flash('You do not have permission to export this class data.', 'danger')
+        return redirect(url_for('view_classes'))
+
+    try:
+        # Create CSV in memory
+        output = StringIO()
+        writer = csv.writer(output)
+
+        # Write headers
+        writer.writerow([
+            'Student Name', 'Latest Writing Age', 'Total Submissions',
+            'Assignment Submissions', 'Free Writing Submissions',
+            'Average Score', 'Latest Submission Date'
+        ])
+
+        # For each student
+        for student in class_obj.students:
+            # Get all writing samples
+            samples = Writing.query.filter_by(student_id=student.id).order_by(Writing.created_at.desc()).all()
+
+            if samples:
+                latest_writing_age = samples[0].writing_age
+                latest_submission = samples[0].created_at.strftime('%Y-%m-%d')
+                total_submissions = len(samples)
+                assignment_submissions = len([s for s in samples if s.assignment_id])
+                free_writing = len([s for s in samples if not s.assignment_id])
+
+                # Calculate average score for assignment submissions
+                scores = []
+                for sample in samples:
+                    if sample.assignment_id:
+                        total_possible = len(sample.criteria_marks) * 2
+                        achieved = sum(mark.score for mark in sample.criteria_marks)
+                        if total_possible > 0:
+                            scores.append((achieved / total_possible) * 100)
+
+                avg_score = f"{round(sum(scores) / len(scores), 1)}%" if scores else "N/A"
+            else:
+                latest_writing_age = "No submissions"
+                latest_submission = "N/A"
+                total_submissions = 0
+                assignment_submissions = 0
+                free_writing = 0
+                avg_score = "N/A"
+
+            # Write row
+            writer.writerow([
+                f"{student.first_name} {student.last_name}",
+                latest_writing_age,
+                total_submissions,
+                assignment_submissions,
+                free_writing,
+                avg_score,
+                latest_submission
+            ])
+
+        # Prepare response
+        output.seek(0)
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename=class_{class_id}_overview_{datetime.now().strftime("%Y%m%d")}.csv'
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting class overview: {str(e)}")
+        flash('Error exporting class overview. Please try again.', 'danger')
+        return redirect(url_for('view_classes'))
+
+# Add this route before the other routes
+@app.route('/static/attached_assets/<path:filename>')
+def serve_attached_assets(filename):
+    return send_from_directory('attached_assets', filename)
+
+# Add this route after the other route definitions, before the last line
+@app.route('/landing')
+def landing():
+    return render_template('landing_page.html')
+
+# Legal pages routes
+@app.route('/terms')
+def terms():
+    return render_template('terms.html')
+
+@app.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
+@app.route('/data-protection')
+def data_protection():
+    return render_template('data_protection.html')
+
+@app.route('/data-processing')
+def data_processing():
+    return render_template('data_processing.html')
+
+# Make the root route show the landing page for non-authenticated users
+@app.route('/')
+def root():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    return redirect(url_for('landing'))
+
+@app.route('/student/<int:student_id>/delete', methods=['POST'])
+@login_required
+def delete_student(student_id):
+    from models import Student
+    student = Student.query.get_or_404(student_id)
+
+    # Check if current user is the teacher of this student's class
+    if student.class_group.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    try:
+        db.session.delete(student)
+        db.session.commit()
+        flash('Student deleted successfully!', 'success')
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Error deleting student: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete student'}), 500
+
+
+
+with app.app_context():
+    try:
+        # Make sure to import the models here or their tables won't be created
+        import models  # noqa: F401
+
+        db.create_all()
+    except Exception as e:
+        logger.error(f"Error creating database tables: {str(e)}")
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)

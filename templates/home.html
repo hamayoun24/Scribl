@@ -1,0 +1,416 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - Text Analysis</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    <style>
+        /* Form input styling */
+        .form-control {
+            color: #198754 !important;
+            font-weight: 500;
+        }
+        .form-control:focus {
+            color: #198754 !important;
+            background-color: rgba(25, 135, 84, 0.1) !important;
+        }
+        .form-control::placeholder {
+            color: rgba(25, 135, 84, 0.6) !important;
+        }
+        .form-control:disabled {
+            color: rgba(25, 135, 84, 0.7) !important;
+            background-color: rgba(25, 135, 84, 0.05) !important;
+        }
+
+        /* Mobile-responsive adjustments */
+        @media (max-width: 768px) {
+            .btn-group {
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .btn-group .btn {
+                width: 100%;
+                margin: 0;
+            }
+
+            .list-group-item .d-flex {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .list-group-item .d-flex > div:last-child {
+                width: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .navbar-nav {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+
+{% extends "base.html" %}
+
+{% block title %}Home - Text Analysis{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+    
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="text-center mb-5">
+                {% if current_user.school_logo %}
+                <div class="mb-4">
+                    <img src="data:image/png;base64,{{ current_user.school_logo }}" 
+                         alt="School Logo"
+                         style="max-height: 100px; width: auto;">
+                </div>
+                {% endif %}
+                <h1 class="display-4 mb-3">Hello {{ current_user.first_name }}!</h1>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4"> Actions</h5>
+                    <div class="d-grid gap-3">
+                        <a href="{{ url_for('add_writing') }}" class="btn btn-primary btn-lg" style="background: linear-gradient(135deg, #2B32FF 0%, #FF3E9D 50%, #FFB830 100%); border: none; transition: transform 0.3s ease; font-weight: normal;">
+                            <i class="fa fa-file-text me-2"></i>Add Writing
+                        </a>
+                        <a href="{{ url_for('assignments') }}" class="btn btn-primary btn-lg" style="background: linear-gradient(135deg, #2B32FF 0%, #FF3E9D 50%, #FFB830 100%); border: none; transition: transform 0.3s ease; font-weight: normal;">
+                            <i class="fa fa-tasks me-2"></i>Assignments
+                        </a>
+                        <button class="btn btn-primary btn-lg" style="background: linear-gradient(135deg, #2B32FF 0%, #FF3E9D 50%, #FFB830 100%); border: none; transition: transform 0.3s ease; font-weight: normal;" data-bs-toggle="modal" data-bs-target="#addClassModal">
+                            <i class="fa fa-plus me-2"></i>Add Class
+                        </button>
+                        <a href="{{ url_for('data_analysis') }}" class="btn btn-primary btn-lg" style="background: linear-gradient(135deg, #2B32FF 0%, #FF3E9D 50%, #FFB830 100%); border: none; transition: transform 0.3s ease; font-weight: normal;">
+                            <i class="fa fa-chart-line me-2"></i>Data Analysis
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            {% if current_user.classes %}
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">Your Classes</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    data-bs-toggle="collapse" 
+                                    data-bs-target="#classesCollapse"
+                                    aria-expanded="true">
+                                <i class="fa fa-chevron-down"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="collapse show" id="classesCollapse">
+                    <div class="card-body">
+                        <div class="list-group">
+                            {% for class in current_user.classes %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">{{ class.name }}</h6>
+                                        <small class="text-muted">Year Group: {{ class.year_group }}</small>
+                                    </div>
+                                    <div class="btn-group">
+                                        <button class="btn btn-outline-primary btn-sm me-2" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#addStudentModal" 
+                                                data-class-id="{{ class.id }}">
+                                            <i class="fa fa-user-plus me-1"></i>Add Student
+                                        </button>
+                                        <button class="btn btn-outline-primary btn-sm me-2" 
+                                                data-bs-toggle="collapse" 
+                                                data-bs-target="#studentList{{ class.id }}">
+                                            <i class="fa fa-list me-1"></i>View Students
+                                        </button>
+                                        <a href="{{ url_for('create_assignment', class_id=class.id) }}" 
+                                           class="btn btn-outline-primary btn-sm me-2">
+                                            <i class="fa fa-tasks me-1"></i>Add Assignment
+                                        </a>
+                                        <button class="btn btn-outline-danger btn-sm"
+                                                onclick="deleteClass({{ class.id }}, '{{ class.name }}')">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="collapse mt-3" id="studentList{{ class.id }}">
+                                    {% if class.students %}
+                                    <div class="list-group">
+                                        {% for student in class.students %}
+                                        <div class="list-group-item list-group-item-action">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <h6 class="mb-1">{{ student.name }}</h6>
+                                                    <small class="text-muted">DOB: {{ student.date_of_birth.strftime('%d/%m/%Y') }}</small>
+                                                </div>
+                                                <div class="btn-group">
+                                                    <a href="{{ url_for('student_portfolio', student_id=student.id) }}" class="btn btn-outline-primary btn-sm">
+                                                        <i class="fa fa-folder-open me-1"></i>Portfolio
+                                                    </a>
+                                                    <button class="btn btn-outline-danger btn-sm"
+                                                            onclick="deleteStudent({{ student.id }}, '{{ student.name }}')">
+                                                        <i class="fa fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted mb-0">No students added yet.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Student Modal -->
+<div class="modal fade" id="addStudentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Students</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Tabs for different input methods -->
+                <ul class="nav nav-tabs mb-3" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="single-tab" data-bs-toggle="tab" 
+                                data-bs-target="#single" type="button" role="tab">
+                            Single Student
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="csv-tab" data-bs-toggle="tab" 
+                                data-bs-target="#csv" type="button" role="tab">
+                            CSV Upload
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+                    <!-- FastAPI-compatible single student form -->
+                    <div class="tab-pane fade show active" id="single" role="tabpanel">
+                        <form method="POST" action="add_student">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+                            <input type="hidden" name="class_id" id="studentClassId">
+
+                            <div class="mb-3">
+                                <label class="form-label" for="student_id">Student ID</label>
+                                <input class="form-control" type="text" name="student_id" id="student_id" value="{{ form_data.student_id or '' }}">
+                                {% for error in form_errors %}
+                                    {% if error.loc[0] == 'student_id' %}
+                                        <div class="invalid-feedback d-block">{{ error.msg }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="first_name">First Name</label>
+                                <input class="form-control" type="text" name="first_name" id="first_name" value="{{ form_data.first_name or '' }}">
+                                {% for error in form_errors %}
+                                    {% if error.loc[0] == 'first_name' %}
+                                        <div class="invalid-feedback d-block">{{ error.msg }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="last_name">Last Name</label>
+                                <input class="form-control" type="text" name="last_name" id="last_name" value="{{ form_data.last_name or '' }}">
+                                {% for error in form_errors %}
+                                    {% if error.loc[0] == 'last_name' %}
+                                        <div class="invalid-feedback d-block">{{ error.msg }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="date_of_birth">Date of Birth</label>
+                                <input class="form-control" type="date" name="date_of_birth" id="date_of_birth" value="{{ form_data.date_of_birth or '' }}">
+                                {% for error in form_errors %}
+                                    {% if error.loc[0] == 'date_of_birth' %}
+                                        <div class="invalid-feedback d-block">{{ error.msg }}</div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+
+                            <button class="btn btn-primary w-100" type="submit">Add Student</button>
+                        </form>
+                    </div>
+
+                    <!-- CSV upload form -->
+                    <div class="tab-pane fade" id="csv" role="tabpanel">
+                        <div class="form-text mb-3">
+                            Upload a CSV file with student details. Format: Student ID (optional), First Name, Last Name, Date of Birth (YYYY-MM-DD)
+                            <a href="#" id="download-student-template" class="d-block mt-2">
+                                <i class="fa fa-download"></i> Download Template
+                            </a>
+                        </div>
+                        <form id="csvUploadForm" enctype="multipart/form-data">
+                            <input type="hidden" name="class_id" id="csvClassId">
+                            <div class="mb-3">
+                                <input type="file" class="form-control" id="studentCsv" accept=".csv" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fa fa-upload me-2"></i>Upload Students
+                            </button>
+                        </form>
+                        <div id="uploadProgress" class="progress mt-3 d-none">
+                            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <div id="uploadResult" class="alert mt-3 d-none"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.getElementById('addStudentModal').addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget;
+        var classId = button.getAttribute('data-class-id');
+        document.getElementById('studentClassId').value = classId;
+        document.getElementById('csvClassId').value = classId;
+    });
+
+    function deleteClass(classId, className) {
+        if (confirm(`Are you sure you want to delete the class "${className}"? This will delete all associated students and assignments.`)) {
+            fetch(`/class/${classId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete class');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the class');
+            });
+        }
+    }
+
+    document.getElementById('download-student-template').addEventListener('click', function(e) {
+        e.preventDefault();
+        const template = "Student ID,First Name,Last Name,Date of Birth\n,John,Smith,2018-09-01\n,Jane,Doe,2018-10-15";
+        const blob = new Blob([template], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'students_template.csv';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    });
+
+    document.getElementById('csvUploadForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        const fileInput = document.getElementById('studentCsv');
+        const progressBar = document.getElementById('uploadProgress');
+        const progressBarInner = progressBar.querySelector('.progress-bar');
+        const resultDiv = document.getElementById('uploadResult');
+
+        if (fileInput.files.length === 0) {
+            resultDiv.className = 'alert alert-danger mt-3';
+            resultDiv.textContent = 'Please select a file to upload';
+            resultDiv.classList.remove('d-none');
+            return;
+        }
+
+        formData.append('file', fileInput.files[0]);
+        progressBar.classList.remove('d-none');
+        resultDiv.classList.add('d-none');
+        progressBarInner.style.width = '50%';
+
+        fetch('/upload_students', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            progressBarInner.style.width = '100%';
+            if (response.redirected) {
+                window.location.href = response.url;
+                return;
+            }
+            return response.json();
+        })
+        .then(result => {
+            if (result && result.error) {
+                throw new Error(result.error);
+            }
+            resultDiv.className = 'alert alert-success mt-3';
+            resultDiv.textContent = 'Students uploaded successfully';
+            resultDiv.classList.remove('d-none');
+            setTimeout(() => window.location.reload(), 1500);
+        })
+        .catch(error => {
+            resultDiv.className = 'alert alert-danger mt-3';
+            resultDiv.textContent = error.message || 'Error uploading students';
+            resultDiv.classList.remove('d-none');
+        })
+        .finally(() => {
+            progressBar.classList.add('d-none');
+        });
+    });
+
+    function deleteStudent(studentId, studentName) {
+        if (confirm(`Are you sure you want to delete ${studentName}? This will delete all their writing samples.`)) {
+            fetch(`/student/${studentId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete student');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the student');
+            });
+        }
+    }
+</script>
+{% endblock %}
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

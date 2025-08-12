@@ -1,0 +1,1516 @@
+{% extends "base.html" %}
+
+{% block extra_head %}
+<style>
+    /* Existing styles remain unchanged */
+    .collapse-header {
+        cursor: pointer;
+        padding: 1rem;
+        background-color: rgba(0, 0, 0, 0.03);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    }
+    .card-header .fa {
+        transition: transform 0.3s ease;
+    }
+    .card-header[aria-expanded="true"] .fa-chevron-down {
+        transform: rotate(180deg);
+    }
+    .image-preview {
+        max-width: 100%;
+        height: auto;
+        margin-top: 1rem;
+    }
+    #preview-container {
+        text-align: center;
+        margin: 1rem 0;
+        position: relative;
+    }
+    #preview-image {
+        max-width: 100%;
+        max-height: 600px;
+        border: 2px solid #ccc;
+        border-radius: 4px;
+    }
+    .nav-button {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        border: none;
+        padding: 1rem;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background 0.3s ease;
+    }
+    .nav-button:hover {
+        background: rgba(0, 0, 0, 0.7);
+    }
+    .nav-button.prev {
+        left: 1rem;
+    }
+    .nav-button.next {
+        right: 1rem;
+    }
+    .images-indicator {
+        position: absolute;
+        bottom: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.5);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+    }
+
+    /* Add new styles for criteria marks */
+    .criteria-mark {
+        padding: 0.5rem;
+        border-radius: 4px;
+        margin-bottom: 0.5rem;
+    }
+    .criteria-mark-0 {
+        background-color: #ffebee; /* Light red */
+        border: 1px solid #ef9a9a;
+    }
+    .criteria-mark-1 {
+        background-color: #fff3e0; /* Light orange */
+        border: 1px solid #ffcc80;
+    }
+    .criteria-mark-2 {
+        background-color: #e8f5e9; /* Light green */
+        border: 1px solid #a5d6a7;
+    }
+
+    /* Style for strengths section */
+    #strengthsSection .card-body {
+        background-color: #e8f5e9; /* Light green - same as success */
+        border: 1px solid #a5d6a7;
+        border-radius: 4px;
+    }
+
+    /* Style for development section */
+    #developmentSection .card-body {
+        background-color: #ffebee; /* Light red - same as needs improvement */
+        border: 1px solid #ef9a9a;
+        border-radius: 4px;
+    }
+
+    /* Style for bullet points */
+    .custom-bullet-list {
+        list-style: none;
+        padding-left: 1.5em;
+    }
+    .custom-bullet-list li {
+        position: relative;
+        margin-bottom: 0.5em;
+    }
+    .custom-bullet-list li:before {
+        content: "•";
+        position: absolute;
+        left: -1.5em;
+        color: inherit;
+    }
+
+    /* Total mark styles */
+    .total-mark {
+        background-color: #f5f5f5;
+        padding: 1rem;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+        text-align: center;
+    }
+    .total-mark h4 {
+        margin: 0;
+        color: #2196f3;
+    }
+
+    /* Writing age colors */
+    .writing-age {
+        font-weight: bold;
+        padding: 0.5rem;
+        border-radius: 4px;
+    }
+    .writing-age-above {
+        color: #2196f3; /* Blue */
+        background-color: #e3f2fd;
+        border: 1px solid #90caf9;
+    }
+    .writing-age-below {
+        color: #f44336; /* Red */
+        background-color: #ffebee;
+        border: 1px solid #ef9a9a;
+    }
+    .writing-age-match {
+        color: #4caf50; /* Green */
+        background-color: #e8f5e9;
+        border: 1px solid #a5d6a7;
+    }
+
+    /* Add styles for quality feedback */
+    #quality-feedback {
+        position: absolute;
+        z-index: 10;
+    }
+    .quality-indicators .badge {
+        background-color: #dc3545;
+    }
+    .quality-indicators .badge.good {
+        background-color: #198754;
+    }
+    #position-guide {
+        position: absolute;
+        z-index: 5;
+    }
+    .guide-ok {
+        border-color: #198754 !important;
+    }
+    .guide-warning {
+        border-color: #ffc107 !important;
+    }
+    .guide-error {
+        border-color: #dc3545 !important;
+    }
+    /* Styles for criteria editing */
+    .score-edit select {
+        width: auto;
+    }
+
+    /* Add custom styles for the color buttons */
+    .color-btn {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid rgba(0,0,0,0.2);
+        margin: 0 2px;
+    }
+    .color-btn:hover {
+        transform: scale(1.1);
+        border-color: rgba(0,0,0,0.4);
+    }
+    .ai-highlight {
+        position: relative;
+        cursor: pointer;
+    }
+    .highlight-tooltip {
+        position: absolute;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        z-index: 1000;
+        max-width: 200px;
+        white-space: normal;
+    }
+
+    /* Styles for confidence badges */
+    #confidence-badge.high {
+        background-color: #198754;
+    }
+    #confidence-badge.medium {
+        background-color: #ffc107;
+    }
+    #confidence-badge.low {
+        background-color: #dc3545;
+    }
+    #validation-badge.valid {
+        background-color: #198754;
+    }
+    #validation-badge.uncertain {
+        background-color: #ffc107;
+    }
+    #validation-badge.invalid {
+        background-color: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="text-center mb-5">
+                <h1 class="display-4 mb-3">Add Writing</h1>
+                <p class="lead">Upload an image or take a photo to extract its text content and analyse the writing style</p>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <form id="upload-form" class="mb-4">
+                        <div class="mb-3">
+                            <label for="class-select" class="form-label">Select Class</label>
+                            <select class="form-select" id="class-select" name="class_id" required>
+                                <option value="">Choose a class...</option>
+                                {% for class in classes %}
+                                <option value="{{ class.id }}">{{ class.name }} ({{ class.year_group }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="student-select" class="form-label">Select Student</label>
+                            <select class="form-select" id="student-select" name="student_id" required disabled>
+                                <option value="">Choose a student...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="assignment-select" class="form-label">Assignment (Optional)</label>
+                            <select class="form-select" id="assignment-select" name="assignment_id" disabled>
+                                <option value="">No assignment - free writing</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-center gap-3 mb-3">
+                                <button type="button" class="btn btn-primary w-100" id="add-image-btn">
+                                    <i class="fa fa-image me-2"></i>Upload Image
+                                </button>
+                            </div>
+                            <input type="file" class="form-control d-none" id="image-upload" accept="image/*" capture="environment" multiple>
+                            <!-- Using capture="environment" for rear camera but with additional safeguards in JS -->
+                            <div id="preview-container" class="d-none">
+                                <div class="position-relative">
+                                    <img id="preview-image" class="image-preview" alt="Preview image">
+                                    <button class="nav-button prev d-none" id="prev-image">
+                                        <i class="fa fa-chevron-left"></i>
+                                    </button>
+                                    <button class="nav-button next d-none" id="next-image">
+                                        <i class="fa fa-chevron-right"></i>
+                                    </button>
+                                    <button class="btn btn-danger btn-sm position-absolute top-0 end-0 m-2" id="delete-image">
+                                        <i class="fa fa-times"></i>
+                                    </button>
+                                    <div class="images-indicator">Image 1 of 1</div>
+                                </div>
+                                <button type="button" class="btn btn-outline-primary mt-3" id="add-more-btn">
+                                    <i class="fa fa-plus me-2"></i>Add Another Image
+                                </button>
+                                {% if is_mobile %}
+                                    <form action="/upload" method="post" enctype="multipart/form-data">
+                                    <input type="file" name="photo" accept="image/*" capture="environment">
+                                    <button type="submit">Upload</button>
+                                    </form>
+                                {% endif %}
+
+                            </div>
+                        </div>
+
+                        <button type="submit" id="process-image" class="btn btn-primary w-100" disabled>
+                            <i class="fa fa-upload me-2"></i>Process Images
+                        </button>
+                    </form>
+
+                    <div id="loading" class="text-center d-none">
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p id="loading-status">Processing your images...</p>
+                        
+                        <div id="teaching-tip" class="mt-4 p-3 border rounded bg-light d-none">
+                            <p class="mb-1"><i class="fa fa-lightbulb text-warning me-2"></i><strong>Teaching Tip 💡</strong></p>
+                            <p id="tip-content" class="mb-0 small"></p>
+                            <p id="tip-reference" class="mt-2 small text-muted fst-italic"></p>
+                        </div>
+                    </div>
+
+                    <div id="error-message" class="alert alert-danger d-none" role="alert"></div>
+
+                    <div id="result-container" class="d-none">
+                        <div class="collapsible-section">
+                            <div class="card">
+                                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#extractedTextSection">
+                                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                        Extracted Text
+                                        <i class="fa fa-chevron-down"></i>
+                                    </h5>
+                                </div>
+                                <div id="extractedTextSection" class="collapse show">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <div>
+                                                <button class="btn btn-sm btn-outline-primary toggle-highlight-mode" data-apply-ai-highlights="true">
+                                                    <i class="fa fa-highlighter me-1"></i> Marking Mode
+                                                </button>
+                                            </div>
+                                            <div class="highlight-controls mt-2" style="display: none;">
+                                                <div class="d-flex align-items-center">
+                                                    <span class="me-2">Choose color:</span>
+                                                    <div class="btn-group highlight-colors">
+                                                        <button class="btn btn-sm color-btn" style="background-color: #ffff00;" aria-label="Yellow" data-bs-toggle="tooltip" title="Yellow"></button>
+                                                        <button class="btn btn-sm color-btn" style="background-color: #90ee90;" aria-label="Green" data-bs-toggle="tooltip" title="Green"></button>
+                                                        <button class="btn btn-sm color-btn" style="background-color: #add8e6;" aria-label="Blue" data-bs-toggle="tooltip" title="Blue"></button>
+                                                        <button class="btn btn-sm color-btn" style="background-color: #ffb6c1;" aria-label="Pink" data-bs-toggle="tooltip" title="Pink"></button>
+                                                        <button class="btn btn-sm color-btn" style="background-color: #ffa500;" aria-label="Orange" data-bs-toggle="tooltip" title="Orange"></button>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-outline-danger ms-2 clear-highlights" data-bs-toggle="tooltip" title="Clear all highlights">
+                                                        <i class="fa fa-eraser"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="text-muted small mt-2">
+                                                    <i class="fa fa-info-circle"></i> Select text to highlight examples of success criteria
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <pre id="extracted-text" class="sample-text mb-0"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="collapsible-section">
+                            <div class="card">
+                                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#writingAgeSection">
+                                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                        Writing Age Assessment
+                                        <i class="fa fa-chevron-down"></i>
+                                    </h5>
+                                </div>
+                                <div id="writingAgeSection" class="collapse show">
+                                    <div class="card-body">
+                                        <div class="mb-4">
+                                            <h6>Writing Sample Age:</h6>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <p id="writing-age" class="lead mb-0"></p>
+                                                <span class="badge" id="confidence-badge"></span>
+                                                <span class="badge" id="validation-badge"></span>
+                                            </div>
+                                            <p id="age-justification" class="text-muted small"></p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="criteriaSection" class="collapsible-section">
+                            <div class="card">
+                                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#successCriteriaSection">
+                                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                        Success Criteria Assessment
+                                        <i class="fa fa-chevron-down"></i>
+                                    </h5>
+                                </div>
+                                <div id="successCriteriaSection" class="collapse show">
+                                    <div class="card-body">
+                                        <div class="total-mark d-flex justify-content-between align-items-center">
+                                            <h4>Total Score: <span id="total-mark">0</span></h4>
+                                            <a id="print-report-btn" href="#" class="btn btn-success d-none" target="_blank">
+                                                <i class="fa fa-print me-2"></i>Print Report
+                                            </a>
+                                        </div>
+                                        <div id="criteria-marks">
+                                            <!-- Criteria marks will be populated here -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="collapsible-section mt-4">
+                            <div class="card">
+                                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#strengthsSection">
+                                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                        Key Strengths
+                                        <i class="fa fa-chevron-down"></i>
+                                    </h5>
+                                </div>
+                                <div id="strengthsSection" class="collapse show">
+                                    <div class="card-body">
+                                        <ul id="strengths" class="custom-bullet-list">
+                                            <!-- Strengths will be populated here -->
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="collapsible-section mt-4">
+                            <div class="card">
+                                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#developmentSection">
+                                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                        Areas for Development
+                                        <i class="fa fa-chevron-down"></i>
+                                    </h5>
+                                </div>
+                                <div id="developmentSection" class="collapse show">
+                                    <div class="card-body">
+                                        <ul id="development" class="custom-bullet-list">
+                                            <!-- Areas for development will be populated here -->
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <div class="collapsible-section mt-4">
+                            <div class="card">
+                                <div class="card-header" data-bs-toggle="collapse" data-bs-target="#feedbackSection">
+                                    <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                        Provide Feedback
+                                        <i class="fa fa-chevron-down"></i>
+                                    </h5>
+                                </div>
+                                <div id="feedbackSection" class="collapse">
+                                    <div class="card-body">
+                                        <form id="feedback-form" class="mb-3" onsubmit="return false;">
+                                            <!-- Hidden field to store writing_id -->
+                                            <input type="hidden" id="writing-id" name="writing_id" value="">
+                                            <div class="mb-3">
+                                                <label class="form-label">Was this analysis helpful?</label>
+                                                <div class="btn-group w-100" role="group">
+                                                    <input type="radio" class="btn-check" name="is_helpful" id="helpful-yes" value="true" autocomplete="off">
+                                                    <label class="btn btn-outline-success" for="helpful-yes">Yes</label>
+                                                    <input type="radio" class="btn-check" name="is_helpful" id="helpful-no" value="false" autocomplete="off">
+                                                    <label class="btn btn-outline-danger" for="helpful-no">No</label>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Which aspects of the analysis were accurate?</label>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="writing-age-accurate" name="writing_age_accurate">
+                                                    <label class="form-check-label" for="writing-age-accurate">
+                                                        Writing Age Assessment
+                                                    </label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="strengths-accurate" name="strengths_accurate">
+                                                    <label class="form-check-label" for="strengths-accurate">
+                                                        Strengths Identified
+                                                    </label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="development-accurate" name="development_accurate">
+                                                    <label class="form-check-label" for="development-accurate">
+                                                        Areas for Development
+                                                    </label>
+                                                </div>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="criteria-accurate" name="criteria_accurate">
+                                                    <label class="form-check-label" for="criteria-accurate">
+                                                        Success Criteria Assessment
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="feedback-comment" class="form-label">Additional Comments (Optional)</label>
+                                                <textarea class="form-control" id="feedback-comment" name="comment" rows="3" placeholder="Please share any additional feedback about the analysis..."></textarea>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary w-100">Submit Feedback</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-center mt-4">
+                            <a href="{{ url_for('add_writing') }}" class="btn btn-primary">
+                                <i class="fa fa-plus me-2"></i>Upload Another Writing Sample
+                            </a>
+                        </div>
+
+                        <div class="d-flex justify-content-center mt-4">
+                            <button id="viewPortfolioBtn" class="btn btn-outline-primary mx-2 px-4" style="display: none;">
+                                <i class="fa fa-folder-open me-1"></i>View Portfolio
+                            </button>
+                            <button id="saveWagollBtn" class="btn btn-outline-success mx-2 px-4" style="display: none;">
+                                <i class="fa fa-star me-1"></i>Save as WAGOLL
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- WAGOLL Save Modal -->
+<div class="modal fade" id="saveWagollModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Save as WAGOLL Example</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="wagollTitle" class="form-label">Title</label>
+                    <input type="text" class="form-control" id="wagollTitle" required>
+                </div>
+                <div class="mb-3">
+                    <label for="wagollExplanation" class="form-label">Why is this a good example?</label>
+                    <textarea class="form-control" id="wagollExplanation" rows="3"></textarea>
+                </div>
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="wagollIsPublic">
+                    <label class="form-check-label" for="wagollIsPublic">Make this example public</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveWagollConfirmBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% with flash = request.session.pop("flash", None) %}
+    {% if flash %}
+        <div id='toast' class="alert alert-{{ flash.category }}">{{ flash.message }}</div>
+    {% endif %}
+{% endwith %}
+
+
+<!-- Add Warning Modal -->
+<div class="modal fade" id="aiWarningModal" tabindex="-1" aria-labelledby="aiWarningModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="aiWarningModalLabel">Important Notice</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Remember AI analysis isn't 100% accurate and can be prone to errors. We suggest reviewing student writing alongside AI analysis.</p>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="dontShowAgain">
+                    <label class="form-check-label" for="dontShowAgain">
+                        Don't show this message again
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="proceedWithUpload">Proceed</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Re-added highlighting.js to ensure text highlighting works -->
+<script src="{{ url_for('static', filename='js/highlighting.js') }}?v={{ range(1, 1000000) | random }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classSelect = document.getElementById('class-select');
+    const studentSelect = document.getElementById('student-select');
+    const assignmentSelect = document.getElementById('assignment-select');
+    const form = document.getElementById('upload-form');
+    const addImageBtn = document.getElementById('add-image-btn');
+    const imageUpload = document.getElementById('image-upload');
+    const previewContainer = document.getElementById('preview-container');
+    const previewImage = document.getElementById('preview-image');
+    const prevImage = document.getElementById('prev-image');
+    const nextImage = document.getElementById('next-image');
+    const submitBtn = document.getElementById('process-image');
+    const errorMessage = document.getElementById('error-message');
+    const deleteButton = document.getElementById('delete-image');
+
+    let currentImageIndex = 0;
+    let uploadedImages = [];
+    let currentWritingId = null;
+
+
+    function updateImageNavigation() {
+        const totalImages = uploadedImages.length;
+        document.querySelector('.images-indicator').textContent = `Image ${currentImageIndex + 1} of ${totalImages}`;
+
+        if (prevImage && nextImage) {
+            prevImage.classList.toggle('d-none', totalImages <= 1 || currentImageIndex === 0);
+            nextImage.classList.toggle('d-none', totalImages <= 1 || currentImageIndex === totalImages - 1);
+        }
+
+        if (totalImages > 0) {
+            previewImage.src = uploadedImages[currentImageIndex].url;
+        }
+        console.log("Current image index:", uploadedImages, uploadedImages.length);
+        // Update submit button state
+        submitBtn.disabled = uploadedImages.length === 0;
+    }
+
+    // Add delete functionality
+    deleteButton.addEventListener('click', (e) => {
+        // Prevent default behavior and stop event propagation
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (uploadedImages.length > 0) {
+            // Remove the current image
+            URL.revokeObjectURL(uploadedImages[currentImageIndex].url);
+            uploadedImages.splice(currentImageIndex, 1);
+
+            if (uploadedImages.length === 0) {
+                // No images left, hide preview
+                previewContainer.classList.add('d-none');
+                currentImageIndex = 0;
+            } else {
+                // Adjust current index if needed
+                if (currentImageIndex >= uploadedImages.length) {
+                    currentImageIndex = uploadedImages.length - 1;
+                }
+                updateImageNavigation();
+            }
+        }
+        
+        // Make sure the form doesn't submit
+        return false;
+    });
+
+    if (prevImage) {
+        prevImage.addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent any form submission
+            if (currentImageIndex > 0) {
+                currentImageIndex--;
+                updateImageNavigation();
+            }
+        });
+    }
+
+    if (nextImage) {
+        nextImage.addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent any form submission
+            if (currentImageIndex < uploadedImages.length - 1) {
+                currentImageIndex++;
+                updateImageNavigation();
+            }
+        });
+    }
+
+    imageUpload.addEventListener('change', function(e) {
+        if (this.files && this.files.length > 0) {
+            Array.from(this.files).forEach((file, index) => {
+                uploadedImages.push({
+                    file: file,
+                    url: URL.createObjectURL(file)
+                });
+            });
+    console.log("jjjjjjjjjjjjjjjjj", uploadedImages)
+            currentImageIndex = uploadedImages.length - 1;
+            previewContainer.classList.remove('d-none');
+            updateImageNavigation();
+        }
+    });
+
+    function updateSubmitButtonState() {
+        submitBtn.disabled = uploadedImages.length === 0;
+    }
+
+    document.getElementById('add-more-btn').addEventListener('click', function() {
+        imageUpload.value = ''; 
+        imageUpload.click();
+    });
+
+    classSelect.addEventListener('change', function() {
+        const classId = this.value;
+
+        studentSelect.innerHTML = '<option value="">Choose a student...</option>';
+        assignmentSelect.innerHTML = '<option value="">No assignment - free writing</option>';
+        studentSelect.disabled = true;
+        assignmentSelect.disabled = true;
+
+        if (classId) {
+            fetch(`/get_students/${classId}`)
+                .then(response => response.json())
+                .then(data => {
+                    studentSelect.disabled = false;
+                    data.forEach(student => {
+                        const option = new Option(student.name, student.id);
+                        option.setAttribute('data-age', student.age); 
+                        studentSelect.add(option);
+                    });
+                });
+
+            fetch(`/get_assignments/${classId}`)
+                .then(response => response.json())
+                .then(data => {
+                    assignmentSelect.disabled = false;
+                    data.forEach(assignment => {
+                        const option = new Option(
+                            `${assignment.title} (${assignment.genre})`, 
+                            assignment.id
+                        );
+                        assignmentSelect.add(option);
+                    });
+                });
+        }    });
+
+    // Upload button - trigger file selection ONCE with preventions against auto-reopening
+    addImageBtn.addEventListener('click', (e) => {
+        e.preventDefault(); // Prevent any default action
+        e.stopPropagation(); // Stop event bubbling
+        
+        imageUpload.value = ''; // Clear any previous selection
+        
+        // Create a one-time event handler to prevent multiple triggers
+        const uploadHandler = function() {
+            imageUpload.removeEventListener('click', uploadHandler);
+            console.log("Upload dialog opened and never reopens");
+        };
+        
+        imageUpload.addEventListener('click', uploadHandler);
+        imageUpload.click();
+        
+        return false; // Prevent form submission
+    });
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        // Check if warning should be shown
+        const dontShowWarning = localStorage.getItem('dontShowAIWarning') === 'true';
+
+        if (!dontShowWarning) {
+            // Show the warning modal
+            const warningModal = new bootstrap.Modal(document.getElementById('aiWarningModal'));
+            warningModal.show();
+
+            // Handle proceed button click
+            document.getElementById('proceedWithUpload').addEventListener('click', function() {
+                // Check if "don't show again" is checked
+                const dontShowCheckbox = document.getElementById('dontShowAgain');
+                if (dontShowCheckbox.checked) {
+                    localStorage.setItem('dontShowAIWarning', 'true');
+                }
+
+                warningModal.hide();
+                processForm();
+            });
+        } else {
+            processForm();
+        }
+    });
+
+    // Function to handle the actual form submission
+    async function processForm() {
+        if (uploadedImages.length === 0) {
+            errorMessage.textContent = 'Please select at least one image';
+            errorMessage.classList.remove('d-none');
+            return;
+        }
+
+        const formData = new FormData(form);
+        uploadedImages.forEach((img, index) => {
+            formData.append('images', img.file);
+        });
+
+        submitBtn.disabled = true;
+        document.getElementById('loading').classList.remove('d-none');
+        document.getElementById('result-container').classList.add('d-none');
+        
+        try {
+            const response = await fetch('/process', {
+                method: 'POST',
+                body: formData
+            });
+            
+            // Removed step progression functionality as requested
+            // Just track when processing began for potential future use
+            const processingStartTime = Date.now();
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to process image');
+            }
+
+            // Set the writing ID globally and in the form so its available for submissions
+            if (data.writing_id) {
+                currentWritingId = data.writing_id;
+                console.log("Set global writing_id to:", currentWritingId);
+
+                // Also set it in the hidden form field
+                const writingIdField = document.getElementById('writing-id');
+                if (writingIdField) {
+                    writingIdField.value = data.writing_id;
+                }
+            }
+
+            // Get student's age
+            const studentSelect = document.getElementById('student-select');
+            const selectedOption = studentSelect.options[studentSelect.selectedIndex];
+            const studentAge = selectedOption.getAttribute('data-age') || null;
+
+            // Update writing age with color coding
+            const writingAgeEl = document.getElementById('writing-age');
+            writingAgeEl.textContent = data.writing_age;
+
+            if (studentAge) {
+                // Extract years from writing age estimate
+                const writingYears = parseInt(data.writing_age.split(' ')[0]);
+                const studentYears = parseInt(studentAge);
+
+                if (writingYears > studentYears) {
+                    writingAgeEl.className = 'writing-age writing-age-above';
+                } else if (writingYears < studentYears) {
+                    writingAgeEl.className = 'writing-age writing-age-below';
+                } else {
+                    writingAgeEl.className = 'writing-age writing-age-match';
+                }
+            }
+
+            document.getElementById('extracted-text').textContent = data.text;
+
+            // Safely process feedback data if it exists
+            if (data.feedback) {
+                console.log("Processing feedback:", data.feedback);
+
+                // Try different separator patterns that might appear in the feedback
+                let strengthsText = '';
+                let developmentText = '';
+
+                // Try standard format with double newline
+                if (data.feedback.includes('\n\nAreas for Development:')) {
+                    const parts = data.feedback.split('\n\nAreas for Development:');
+                    strengthsText = parts[0] || '';
+                    developmentText = parts.length > 1 ? parts[1] : '';
+                }
+                // Try alternative format with single line break
+                else if (data.feedback.includes('\nAreas for Development:')) {
+                    const parts = data.feedback.split('\nAreas for Development:');
+                    strengthsText = parts[0] || '';
+                    developmentText = parts.length > 1 ? parts[1] : '';
+                }
+                // Try format without newlines
+                else if (data.feedback.includes('Areas for Development:')) {
+                    const parts = data.feedback.split('Areas for Development:');
+                    strengthsText = parts[0] || '';
+                    developmentText = parts.length > 1 ? parts[1] : '';
+                }
+                // If no separator found, assume all feedback is in one section
+                else {
+                    strengthsText = data.feedback;
+                }
+
+                // Clean up strength text to remove "No strengths identified" if there are other points
+                let cleanStrengthsText = strengthsText.replace('Strengths:', '').trim();
+                const strengthsLines = cleanStrengthsText.split('\n').map(line => line.trim()).filter(line => line);
+                if (strengthsLines.length > 1) {
+                    cleanStrengthsText = strengthsLines
+                        .filter(line => !line.includes("No strengths identified"))
+                        .join('\n');
+                }
+
+                // Clean up development text to remove "No areas for development identified" if there are other points
+                let cleanDevelopmentText = developmentText.trim();
+                const developmentLines = cleanDevelopmentText.split('\n').map(line => line.trim()).filter(line => line);
+                if (developmentLines.length > 1) {
+                    cleanDevelopmentText = developmentLines
+                        .filter(line => !line.includes("No areas for development identified") && !line.includes("No areas identified"))
+                        .join('\n');
+                }
+
+                // Update strengths with custom bullet points
+                document.getElementById('strengths').innerHTML = createBulletPoints(cleanStrengthsText);
+
+                // Update development with custom bullet points
+                document.getElementById('development').innerHTML = cleanDevelopmentText
+                    ? createBulletPoints(cleanDevelopmentText)
+                    : '<li>No development areas identified</li>';
+            } else {
+                // Handle case when no feedback data is available
+                document.getElementById('strengths').innerHTML = '<li>Analysis unavailable</li>';
+                document.getElementById('development').innerHTML = '<li>Analysis unavailable</li>';
+            }
+
+            // Handle criteria marks if present
+            const criteriaContainer = document.getElementById('criteria-marks');
+            if (data.criteria_marks && data.criteria_marks.length > 0) {
+                let totalScore = 0;
+                let criteriaHtml = '';
+
+                data.criteria_marks.forEach((mark, index) => {
+                    totalScore += mark.score;
+                    const bgColor = mark.score === 0 ? '#ffb6c1' : 
+                                  mark.score === 1 ? '#ffffaa' : 
+                                  mark.score === 2 ? '#c2f0c2' : '#ffffff';
+                    
+                    criteriaHtml += `
+                        <div class="criteria-box" data-score="${mark.score}" style="background-color:${bgColor}; border-left:4px solid ${mark.score === 0 ? '#f88' : mark.score === 1 ? '#cc0' : '#6c6'}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>${mark.criteria}</strong>
+                                    <div class="text-muted small">${mark.justification}</div>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <span class="badge bg-primary score-display" data-criteria-id="${index}">Score: ${mark.score}/2</span>
+                                    <div class="score-edit d-none ms-2">
+                                        <select class="form-select form-select-sm edit-score" data-criteria-id="${index}">
+                                            <option value="0" ${mark.score == 0 ? 'selected' : ''}>0 - Not met</option>
+                                            <option value="1" ${mark.score == 1 ? 'selected' : ''}>1 - Partially met</option>
+                                            <option value="2" ${mark.score == 2 ? 'selected' : ''}>2 - Confidently used</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                // Update total mark
+                const maxScore = data.criteria_marks.length * 2;
+                document.getElementById('total-mark').textContent = `${totalScore}/${maxScore}`;
+
+                // Add edit controls
+                const editControls = `
+                    <div class="d-flex justify-content-end mb-3" id="criteria-controls">
+                        <button class="btn btn-outline-primary btn-sm me-2" id="edit-criteria-btn">
+                            <i class="fa fa-pencil"></i> Edit Assessment
+                        </button>
+                        <div class="d-none" id="save-criteria-controls">
+                            <button class="btn btn-success btn-sm me-2" id="save-criteria-btn">
+                                <i class="fa fa-save"></i> Save Changes
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" id="cancel-criteria-btn">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                criteriaContainer.innerHTML = editControls + criteriaHtml;
+                document.getElementById('criteriaSection').classList.remove('d-none');
+
+                // Setup edit functionality
+                setupCriteriaEditing();
+            } else {
+                document.getElementById('criteriaSection').classList.add('d-none');
+            }
+
+            document.getElementById('result-container').classList.remove('d-none');
+            
+            // Initialize or reinitialize text highlighting
+            if (typeof setupTextHighlighting === 'function') {
+                // Force setup of text highlighting again
+                setTimeout(() => {
+                    setupTextHighlighting();
+                    console.log("Text highlighting setup reinitialized");
+                    
+                    // No longer auto-activate highlighting mode - let the user click the button
+                    // This ensures marking mode only triggers when explicitly requested
+                }, 500);
+            } else {
+                console.warn("Highlighting functions not available");
+            }
+
+            // Update print report link and set writing ID in hidden field
+            const printReportLink = document.getElementById('print-report-btn');
+            const writingIdField = document.getElementById('writing-id');
+            if (data.writing_id) {
+                // Set the value in the hidden form field for the feedback form
+                if (writingIdField) {
+                    writingIdField.value = data.writing_id;
+                    console.log("Set writing ID in form field:", data.writing_id);
+                }
+
+                // Update print report link if it exists
+                if (printReportLink) {
+                    printReportLink.href = `/writing/${data.writing_id}/print_report`;
+                    printReportLink.classList.remove('d-none');
+                }
+            }
+
+            // Show action buttons
+            const viewPortfolioBtn = document.getElementById('viewPortfolioBtn');
+            const saveWagollBtn = document.getElementById('saveWagollBtn');
+            const studentId = document.getElementById('student-select').value;
+            const assignmentId = document.getElementById('assignment-select').value;
+
+            if (studentId) {
+                viewPortfolioBtn.style.display = 'block';
+                viewPortfolioBtn.onclick = function() {
+                    window.location.href = `/student/${studentId}/portfolio`;
+                };
+            }
+
+            if (data.writing_id) {
+                saveWagollBtn.style.display = 'block';
+                saveWagollBtn.onclick = function() {
+                    saveAsWagoll(data.text, data.writing_id, assignmentId);
+                };
+            }
+
+
+        } catch (error) {
+            errorMessage.textContent = error.message;
+            errorMessage.classList.remove('d-none');
+        } finally {
+            submitBtn.disabled = false;
+            document.getElementById('loading').classList.add('d-none');
+            // Analysis steps have been removed as requested
+        }
+    }
+
+    function createBulletPoints(text) {
+        if (!text || text.trim() === '') {
+            return '<li>No points available</li>';
+        }
+
+        // Split by newlines
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+
+        // If no lines found, return the original text
+        if (lines.length === 0) {
+            return `<li>${text}</li>`;
+        }
+
+        // Check if the lines already have bullet points
+        const hasBullets = lines.some(line => 
+            line.startsWith('-') || line.startsWith('•') || /^\d+\./.test(line)
+        );
+
+        if (hasBullets) {
+            // Process lines with existing bullet points
+            return lines.map(line => {
+                // Remove bullet character and trim
+                let content = line;
+                if (line.startsWith('-') || line.startsWith('•')) {
+                    content = line.substring(1).trim();
+                } else if (/^\d+\./.test(line)) {
+                    content = line.substring(line.indexOf('.') + 1).trim();
+                }
+                return content ? `<li>${content}</li>` : '';
+            }).filter(item => item).join('');
+        } else {
+            // If no bullet points found, treat each line as a separate point
+            return lines.map(line => `<li>${line}</li>`).join('');
+        }
+    }
+
+    function setupCriteriaEditing() {
+        const editBtn = document.getElementById('edit-criteria-btn');
+        const saveControls = document.getElementById('save-criteria-controls');
+        const cancelBtn = document.getElementById('cancel-criteria-btn');
+        const scoreDisplays = document.querySelectorAll('.score-display');
+        const scoreEdits = document.querySelectorAll('.score-edit');
+
+        editBtn.addEventListener('click', () => {
+            editBtn.classList.add('d-none');
+            saveControls.classList.remove('d-none');
+            scoreDisplays.forEach(display => display.classList.add('d-none'));
+            scoreEdits.forEach(edit => edit.classList.remove('d-none'));
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            editBtn.classList.remove('d-none');
+            saveControls.classList.add('d-none');
+            scoreDisplays.forEach(display => display.classList.remove('d-none'));
+            scoreEdits.forEach(edit => edit.classList.add('d-none'));
+        });
+
+        // Use event delegation properly for the save button
+        document.getElementById('save-criteria-btn').addEventListener('click', async function() {
+            console.log("Save criteria button clicked");
+
+            // Check if we have a writing ID
+            if (!currentWritingId) {
+                alert('Error: No writing ID found. Please refresh the page and try again.');
+                console.error('No writing ID found when trying to save criteria');
+                return;
+            }
+
+            // Get all the score select elements
+            const scoreSelects = document.querySelectorAll('.edit-score');
+            console.log(`Found ${scoreSelects.length} score selects`);
+
+            // Create an array to hold the updated marks
+            const updatedMarks = [];
+
+            // Loop through each score select and add to updated marks
+            scoreSelects.forEach(select => {
+                const criteriaIndex = parseInt(select.dataset.criteriaId, 10);
+                const score = parseInt(select.value, 10);
+                console.log(`Adding criteria index ${criteriaIndex} with score ${score}`);
+
+                updatedMarks.push({
+                    criteria_index: criteriaIndex,
+                    score: score
+                });
+            });
+
+            console.log(`Sending ${updatedMarks.length} updated marks for writing ID ${currentWritingId}`);
+
+            try {
+                // Send the update to the server
+                const response = await fetch('/update_criteria_marks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        writing_id: currentWritingId,
+                        updated_marks: updatedMarks
+                    })
+                });
+
+                // Parse the response
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Success! Update the UI
+                    console.log("Criteria updated successfully");
+
+                    // Update score displays
+                    scoreSelects.forEach(select => {
+                        const criteriaIndex = select.dataset.criteriaId;
+                        const scoreDisplay = document.querySelector(`.score-display[data-criteria-id="${criteriaIndex}"]`);
+                        if (scoreDisplay) {
+                            scoreDisplay.textContent = `Score: ${select.value}/2`;
+
+                            // Update the criteria-box to reflect the new score with the appropriate background color
+                            const criteriaBox = scoreDisplay.closest('.criteria-box');
+                            if (criteriaBox) {
+                                const newScore = parseInt(select.value, 10);
+                                const newBgColor = newScore === 0 ? '#ffb6c1' : 
+                                                   newScore === 1 ? '#ffffaa' : 
+                                                   newScore === 2 ? '#c2f0c2' : '#ffffff';
+                                const newBorderColor = newScore === 0 ? '#f88' : 
+                                                      newScore === 1 ? '#cc0' : 
+                                                      newScore === 2 ? '#6c6' : '#ccc';
+                                
+                                criteriaBox.style.backgroundColor = newBgColor;
+                                criteriaBox.style.borderLeft = `4px solid ${newBorderColor}`;
+                                criteriaBox.dataset.score = newScore;
+                            }
+                        }
+                    });
+
+                    // Calculate and update total score
+                    let totalScore = 0;
+                    updatedMarks.forEach(mark => totalScore += mark.score);
+                    const totalPossible = updatedMarks.length * 2;
+                    document.getElementById('total-mark').textContent = `${totalScore}/${totalPossible}`;
+
+                    // Hide the edit controls and show the display controls
+                    document.getElementById('edit-criteria-btn').classList.remove('d-none');
+                    document.getElementById('save-criteria-controls').classList.add('d-none');
+
+                    // Show all score displays and hide all score edits
+                    document.querySelectorAll('.score-display').forEach(display => display.classList.remove('d-none'));
+                    document.querySelectorAll('.score-edit').forEach(edit => edit.classList.add('d-none'));
+
+                    // Show success message as an in-app notification
+                    const successNotification = document.createElement('div');
+                    successNotification.className = 'alert alert-success mt-3';
+                    successNotification.innerHTML = '<i class="fa fa-check-circle me-2"></i>Criteria updated successfully!';
+                    document.getElementById('criteria-marks').prepend(successNotification);
+
+                    // Auto-dismiss after 3 seconds
+                    setTimeout(() => {
+                        successNotification.classList.add('fade');
+                        setTimeout(() => successNotification.remove(), 500);
+                    }, 3000);
+                } else {
+                    console.error(`Error updating criteria: ${data.error || 'Unknown error'}`);
+                    alert(`Error updating criteria: ${data.error || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error(`Exception when updating criteria: ${error}`);
+                alert(`Error updating criteria: ${error}`);
+            }
+        });
+    }
+
+    function updateConfidenceBadges() {
+        const confidence = document.querySelector('.results-card').dataset.confidence;
+        const validation = document.querySelector('.results-card').dataset.validation;
+
+        const confidenceBadge = document.getElementById('confidence-badge');
+        const validationBadge = document.getElementById('validation-badge');
+
+        confidenceBadge.textContent = `Confidence: ${confidence}`;
+        validationBadge.textContent = `Validation: ${validation}`;
+
+        // Apply styling based on confidence level
+        if (confidence >= 0.8) {
+            confidenceBadge.classList.add('high');
+        } else if (confidence >= 0.5) {
+            confidenceBadge.classList.add('medium');
+        } else {
+            confidenceBadge.classList.add('low');
+        }
+
+        // Apply styling based on validation status
+        if (validation.toLowerCase() === 'valid') {
+            validationBadge.classList.add('valid');
+        } else if (validation.toLowerCase() === 'uncertain') {
+            validationBadge.classList.add('uncertain');
+        } else {
+            validationBadge.classList.add('invalid');
+        }
+    }
+
+});
+</script>
+<script>
+// Set up the feedback form submission
+document.getElementById('feedback-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    // Get the writing ID from the hidden field (this ensures we use the same ID set during processing)
+    const writingIdField = document.getElementById('writing-id');
+
+    // Create feedback submission data
+    const feedbackData = {
+        writing_id: writingIdField.value,
+        is_helpful: document.querySelector('input[name="is_helpful"]:checked')?.value || 'false',
+        writing_age_accurate: document.getElementById('writing-age-accurate').checked,
+        strengths_accurate: document.getElementById('strengths-accurate').checked,
+        development_accurate: document.getElementById('development-accurate').checked,
+        criteria_accurate: document.getElementById('criteria-accurate').checked,
+        comment: document.getElementById('feedback-comment').value
+    };
+
+    // Validate writing_id
+    if (!feedbackData.writing_id || feedbackData.writing_id === '' || isNaN(parseInt(feedbackData.writing_id))) {
+        console.error('Writing ID is invalid:', feedbackData.writing_id);
+        const alert = document.createElement('div');
+        alert.className = 'alert custom-error mt-3';
+        alert.textContent = 'Error: Writing ID is missing or invalid. Please refresh the page and try again.';
+        this.appendChild(alert);
+        return;
+    }
+
+    console.log('Submitting feedback with data:', feedbackData);
+
+    try {
+        const response = await fetch('/submit_feedback', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(feedbackData),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || 'Failed to submit feedback');
+        }
+
+        // Show success message
+        const alert = document.createElement('div');
+        alert.className = 'alert custom-success mt-3';
+        alert.textContent = 'Thank you for your feedback!';
+        this.appendChild(alert);
+
+        // Disable form
+        this.querySelectorAll('input, textarea, button').forEach(el => el.disabled = true);
+
+        // Prevent default form submission which would redirect
+        return false;
+
+    } catch (error) {
+        console.error('Error submitting feedback:', error);
+        const alert = document.createElement('div');
+        alert.className = 'alert custom-error mt-3';
+        alert.textContent = 'Failed to submit feedback: ' + error.message;
+        this.appendChild(alert);
+    }
+});
+
+async function saveAsWagoll(text, writingId, assignmentId) {
+    try {
+        const response = await fetch('/save_to_wagoll', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                writing_id: writingId,
+                text: text,
+                assignment_id: assignmentId
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.text(); // Try to get error details as text
+            const errorMessage = errorData || 'Error saving to WAGOLL library: Unknown error';
+            alert(errorMessage);
+            console.error('Error saving to WAGOLL:', errorMessage, response);
+            return;
+        }
+        const data = await response.json();
+        if (response.ok) {
+            alert('Writing saved to WAGOLL library!');
+        } else {
+            alert('Error saving to WAGOLL library: ' + data.error);
+        }
+    } catch (error) {
+        if (error.message.includes('Unexpected token')) {
+            alert('Error saving to WAGOLL library: Invalid JSON response from server.');
+        } else {
+            alert('Error saving to WAGOLL library: ' + error.message);
+        }
+        console.error('Error saving to WAGOLL:', error);
+    }
+}
+
+// Variables to store current writing content and IDs
+let currentWritingContent = '';
+let currentWritingId = null;
+let currentAssignmentId = null;
+
+// Set up the Save as WAGOLL button functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const saveWagollBtn = document.getElementById('saveWagollBtn');
+    const saveWagollModal = new bootstrap.Modal(document.getElementById('saveWagollModal'));
+
+    if (saveWagollBtn) {
+        saveWagollBtn.addEventListener('click', function() {
+            // Check if we have content to save
+            if (!currentWritingContent) {
+                alert('No writing content available to save as WAGOLL');
+                return;
+            }
+
+            // Reset the form
+            document.getElementById('wagollTitle').value = '';
+            document.getElementById('wagollExplanation').value = '';
+            document.getElementById('wagollIsPublic').checked = false;
+
+            // Show the modal
+            saveWagollModal.show();
+        });
+    }
+
+    // Add event listener for the Save button in the modal
+    const saveWagollConfirmBtn = document.getElementById('saveWagollConfirmBtn');
+    if (saveWagollConfirmBtn) {
+        saveWagollConfirmBtn.addEventListener('click', function() {
+            const title = document.getElementById('wagollTitle').value;
+            const explanation = document.getElementById('wagollExplanation').value;
+            const isPublic = document.getElementById('wagollIsPublic').checked;
+
+            if (!title) {
+                alert('Please enter a title');
+                return;
+            }
+
+            // Save to WAGOLL library
+            saveAsWagoll(currentWritingContent, currentWritingId, currentAssignmentId, title, explanation, isPublic);
+
+            // Hide the modal
+            saveWagollModal.hide();
+        });
+    }
+});
+
+// Modified saveAsWagoll function to accept additional parameters
+function saveAsWagoll(textContent, writingId, assignmentId, title = null, explanations = null, isPublic = false) {
+    // Store the current writing content for later use
+    currentWritingContent = textContent;
+    currentWritingId = writingId;
+    currentAssignmentId = assignmentId;
+
+    // If title is provided, save directly without showing modal
+    if (title !== null) {
+        submitWagollSave(textContent, writingId, assignmentId, title, explanations, isPublic);
+    } else {
+        // If no title, show the modal (handled by the click event listener)
+        const saveWagollModal = new bootstrap.Modal(document.getElementById('saveWagollModal'));
+        saveWagollModal.show();
+    }
+}
+
+// Function to submit the WAGOLL save
+function submitWagollSave(textContent, writingId, assignmentId, title, explanations, isPublic) {
+    fetch('/wagoll_example/save', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            title: title,
+            content: textContent,
+            explanations: explanations,
+            is_public: isPublic,
+            assignment_id: assignmentId,
+            writing_id: writingId
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Successfully saved to WAGOLL library!');
+        } else {
+            alert('Failed to save: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error saving to WAGOLL library: ' + error.message);
+    });
+}
+</script>
+
+<!-- Teaching Tips Implementation -->
+<script>
+// Array of evidence-informed teaching tips based on Rosenshine, Sherrington, Sweller, Clarke, Bjorks
+
+    // Teaching tips are loaded from teaching_tips.js
+
+
+    // Function to display random teaching tips during processing
+    function displayRandomTeachingTip() {
+        const tipContent = document.getElementById('tip-content');
+        const tipReference = document.getElementById('tip-reference');
+        const teachingTipContainer = document.getElementById('teaching-tip');
+        
+        if (tipContent && teachingTipContainer) {
+            // Select a random tip from the array
+            const randomIndex = Math.floor(Math.random() * teachingTips.length);
+            const selectedTip = teachingTips[randomIndex];
+            
+            tipContent.textContent = selectedTip.text;
+            
+            // Set the reference if the element exists
+            if (tipReference) {
+                tipReference.textContent = selectedTip.reference;
+            }
+            
+            // Show the teaching tip
+            teachingTipContainer.classList.remove('d-none');
+        }
+    }
+
+// Function to cycle through tips every 8 seconds
+function startTeachingTipsCycle() {
+    // Display first tip immediately
+    displayRandomTeachingTip();
+    
+    // Set interval to change tips
+    return setInterval(displayRandomTeachingTip, 8000);
+}
+
+// Add an event listener to initialize teaching tips when form is submitted
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('upload-form');
+    let tipIntervalId = null;
+    
+    if (form) {
+        form.addEventListener('submit', function() {
+            // Start cycling through teaching tips
+            tipIntervalId = startTeachingTipsCycle();
+        });
+        
+        // Stop interval when processing is done (response received)
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && 
+                    mutation.attributeName === 'class' &&
+                    document.getElementById('loading').classList.contains('d-none') && 
+                    tipIntervalId !== null) {
+                    clearInterval(tipIntervalId);
+                    tipIntervalId = null;
+                }
+            });
+        });
+        
+        observer.observe(document.getElementById('loading'), { attributes: true });
+    }
+});
+</script>
+<script>
+  var element = document.getElementById('toast');
+  element.style.display = "block";
+  setTimeout(function() {
+    element.style.display = "none";
+  }, 3000); // 1000ms = 1 second
+</script>
+{% endblock %}

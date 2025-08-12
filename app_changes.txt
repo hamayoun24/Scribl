@@ -1,0 +1,103 @@
+diff --git a/app.py b/app.py
+index cb49b29..b8dae59 100644
+--- a/app.py
++++ b/app.py
+@@ -969,46 +969,56 @@ def get_api_student_data():
+             all_dates_list = sorted(all_dates)
+             avg_data = []
+             
+-            # Calculate average for each date
++            # Calculate average for each sample point
+             for date_str in all_dates_list:
+-                date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+-                next_date = date_obj + timedelta(days=1)
++                # Extract the writing ID from the date string if it's in the format YYYY-MM-DD (ID)
++                writing_id = None
++                if " (" in date_str and ")" in date_str:
++                    try:
++                        writing_id = int(date_str.split("(")[1].split(")")[0])
++                    except (ValueError, IndexError):
++                        writing_id = None
+                 
+-                # Query for writing samples on this date
+-                if chart_type == 'writing_scores':
+-                    # Average score for the day
+-                    samples = Writing.query.filter(
+-                        Writing.student_id.in_(class_student_ids),
+-                        Writing.created_at >= date_obj,
+-                        Writing.created_at < next_date
+-                    ).all()
+-                    
+-                    # Calculate scores directly from criteria marks for each sample
+-                    valid_samples = []
+-                    sample_scores = []
++                # Set default value
++                avg_data.append(None)
++                
++                # Extract the writing ID from the date string if it's in the format YYYY-MM-DD (ID)
++                writing_id = None
++                if " (" in date_str and ")" in date_str:
++                    try:
++                        writing_id = int(date_str.split("(")[1].split(")")[0])
++                    except (ValueError, IndexError):
++                        writing_id = None
++                
++                if writing_id and chart_type == 'writing_scores':
++                    # Find all writing samples with this ID that belong to the class
++                    sample = Writing.query.filter(
++                        Writing.id == writing_id,
++                        Writing.student_id.in_(class_student_ids)
++                    ).first()
+                     
+-                    for s in samples:
+-                        if s.criteria_marks:
+-                            # Use exact same method as in individual score calculation
+-                            total_criteria = len(s.criteria_marks)
+-                            criteria_met = sum(1 for mark in s.criteria_marks if mark.score == 2)
+-                            criteria_partial = sum(1 for mark in s.criteria_marks if mark.score == 1)
++                    if sample and sample.criteria_marks:
++                        # Calculate the score directly using same method as individual score calculation
++                        total_criteria = len(sample.criteria_marks)
++                        if total_criteria > 0:
++                            criteria_met = sum(1 for mark in sample.criteria_marks if mark.score == 2)
++                            criteria_partial = sum(1 for mark in sample.criteria_marks if mark.score == 1)
+                             
+                             # Calculate percentage the same way as portfolio page
+                             met_percent = (criteria_met / total_criteria) * 100
+                             partial_percent = (criteria_partial / total_criteria) * 100
+                             score_percentage = met_percent + (partial_percent / 2)
+                             
+-                            valid_samples.append(s)
+-                            sample_scores.append(score_percentage)
+-                    
+-                    if valid_samples:
+-                        avg_value = sum(sample_scores) / len(valid_samples)
+-                        avg_data.append(avg_value)
+-                    else:
+-                        avg_data.append(None)
++                            # Replace the None value with the actual score
++                            avg_data[-1] = score_percentage
+                         
+                 elif chart_type == 'writing_age':
++                    # Extract the date part for filtering
++                    if " (" in date_str:
++                        date_part = date_str.split(" (")[0]
++                        date_obj = datetime.strptime(date_part, '%Y-%m-%d').date()
++                        next_date = date_obj + timedelta(days=1)
++                    
+                     # Average writing age
+                     samples = Writing.query.filter(
+                         Writing.student_id.in_(class_student_ids),
+@@ -1034,6 +1044,12 @@ def get_api_student_data():
+                         avg_data.append(None)
+                 
+                 elif chart_type == 'age_difference':
++                    # Extract the date part for filtering
++                    if " (" in date_str:
++                        date_part = date_str.split(" (")[0]
++                        date_obj = datetime.strptime(date_part, '%Y-%m-%d').date()
++                        next_date = date_obj + timedelta(days=1)
++                        
+                     # Average age difference
+                     samples = Writing.query.filter(
+                         Writing.student_id.in_(class_student_ids),

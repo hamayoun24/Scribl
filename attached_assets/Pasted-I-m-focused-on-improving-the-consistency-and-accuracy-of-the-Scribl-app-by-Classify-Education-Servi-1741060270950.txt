@@ -1,0 +1,32 @@
+I'm focused on improving the consistency and accuracy of the Scribl app (by Classify Education Services FZCO) to save teachers time marking student writing. The core feature we need to enhance is our text highlighting functionality on the analysis and portfolio pages. This feature takes the extracted text from a writing sample and highlights examples of success criteria (SC) that the AI has marked. Each SC marker includes a justification (with examples in single quotes) and a score (1 for partially met, 2 for fully met).
+
+Our goal is to ensure that only the exact words or phrases defined by teachers (or by the refined AI output) are highlighted—using yellow for partial (score 1) and green for full (score 2) matches—without capturing unwanted matches (such as adjectives or adverbs) or partial matches (like “you” matching “your”). The system should:
+
+Robust Input Processing:
+
+Normalize the extracted text (standardize whitespace, punctuation, and case) before highlighting.
+Validate that SC markers are in the expected format (e.g., text within single quotes) before processing.
+Refined Highlighting Logic:
+
+Use exact string matching with word boundaries (e.g., using regex with \b) so that if a teacher specifies 'you', it only highlights the standalone word “you” and not “your” or “yours.”
+Collect all matching ranges in the text, sort them by length (longest first), and merge overlapping matches to avoid nested or repeated highlights.
+Rebuild the final highlighted HTML output in one pass.
+AI Prompt Optimization:
+
+Optimize our AI prompts so it returns very precise and exact SC markers (with explicit examples) to reduce inaccuracies.
+Encourage the AI (or teachers) to list the exact words/phrases to be highlighted, rather than broad or vague criteria.
+User Feedback & Manual Overrides:
+
+Provide a simple mechanism in the UI for teachers to quickly remove or add highlights if the AI’s suggestions are off.
+Optionally log these manual adjustments for further iterative improvement of the AI outputs.
+Automated Testing & Monitoring:
+
+Develop unit tests for the highlighting function, covering edge cases (e.g., overlapping matches, punctuation issues) to ensure consistent behavior.
+Set up a continuous integration pipeline to run these tests on code changes.
+Monitor performance metrics (such as the rate of manual corrections vs. auto-highlights) to gauge improvements in accuracy over time.
+Seamless Integration:
+
+All changes must integrate into the existing two-pass workflow (first pass for AI analysis, second pass for highlighting) without breaking current functionality.
+Preserve the core experience of Scribl while making the highlighting as accurate and reliable as possible.
+Please provide updated JavaScript code for the helper function (e.g., highlightText) that implements this robust, two-pass highlighting approach along with any necessary instructions on integrating automated tests or CI for this feature.
+

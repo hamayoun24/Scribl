@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">Admin Analytics Dashboard</h1>
+            <div class="alert alert-info">
+                <i class="fa fa-info-circle me-2"></i>Manage teachers and view analytics across all users.
+            </div>
+        </div>
+    </div>
+    {% with flash = request.session.pop("flash", None) %}
+        {% if flash %}
+            <div id='toast' class="alert alert-{{ flash.category }}">{{ flash.message }}</div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Stats cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Users</h5>
+                    <h2 class="display-4">{{ metrics.total_users }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Writing Samples</h5>
+                    <h2 class="display-4">{{ metrics.total_writings }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Classes</h5>
+                    <h2 class="display-4">{{ metrics.total_classes }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning h-100">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Total Students</h5>
+                    <h2 class="display-4">{{ metrics.total_students }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+
+    <!-- Teacher Management Table -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Teacher Management</h5>
+                    <div>
+                        <a href="{{ url_for('export_users') }}" class="btn btn-success me-2">
+                            <i class="fa fa-file-excel-o me-1"></i> Export to Excel
+                        </a>
+                        <button id="bulkDeleteBtn" class="btn btn-danger" style="display: none;">
+                            <i class="fa fa-trash"></i> Delete Selected
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        <input type="checkbox" id="selectAll" class="form-check-input">
+                                    </th>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>School</th>
+                                    <th>Signup Date</th>
+                                    <th>Last Login</th>
+                                    <th>Classes</th>
+                                    <th>Students</th>
+                                    <th>Uploads</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for teacher in teachers %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input user-select" 
+                                               data-user-id="{{ teacher.id }}"
+                                               data-user-name="{{ teacher.first_name }} {{ teacher.last_name }}"
+                                               {% if teacher.is_admin %}disabled{% endif %}>
+                                    </td>
+                                    <td>{{ teacher.first_name }} {{ teacher.last_name }}</td>
+                                    <td>{{ teacher.email }}</td>
+                                    <td>{{ teacher.school_name }}</td>
+                                    <td>{{ teacher.created_at.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ teacher.last_login.strftime('%Y-%m-%d %H:%M') if teacher.last_login else 'Never' }}</td>
+                                    <td>{{ teacher.class_count }}</td>
+                                    <td>{{ teacher.student_count }}</td>
+                                    <td>{{ teacher.upload_count }}</td>
+                                    <td>
+                                        {% if not teacher.is_admin %}
+                                        <button class="btn btn-danger btn-sm delete-user"
+                                                data-user-id="{{ teacher.id }}"
+                                                data-user-name="{{ teacher.first_name }} {{ teacher.last_name }}">
+                                            <i class="fa fa-trash"></i> Delete
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete User Confirmation Modal -->
+<div class="modal fade" id="deleteUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm User Deletion</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fa fa-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> This action cannot be undone.
+                </div>
+                <p>Are you sure you want to delete the following user(s)?</p>
+                <p id="selectedUsersText" class="fw-bold"></p>
+                <p>This will permanently delete:</p>
+                <ul>
+                    <li>All classes created by the user</li>
+                    <li>All student records in those classes</li>
+                    <li>All writing samples and analyses</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteUser">
+                    <i class="fa fa-trash me-1"></i>Delete Users
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteUserModal = new bootstrap.Modal(document.getElementById('deleteUserModal'));
+    let selectedUsers = [];
+
+    // Select all functionality
+    document.getElementById('selectAll').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.user-select:not(:disabled)');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+            updateSelectedUsers();
+        });
+    });
+
+    // Individual checkbox handling
+    document.querySelectorAll('.user-select').forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedUsers);
+    });
+
+    function updateSelectedUsers() {
+        selectedUsers = Array.from(document.querySelectorAll('.user-select:checked')).map(checkbox => ({
+            id: checkbox.getAttribute('data-user-id'),
+            name: checkbox.getAttribute('data-user-name')
+        }));
+
+        const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+        bulkDeleteBtn.style.display = selectedUsers.length > 0 ? 'block' : 'none';
+    }
+
+    // Bulk delete button handler
+    document.getElementById('bulkDeleteBtn').addEventListener('click', function() {
+        if (selectedUsers.length > 0) {
+            const names = selectedUsers.map(user => user.name).join(', ');
+            document.getElementById('selectedUsersText').textContent = `Selected users: ${names}`;
+            deleteUserModal.show();
+        }
+    });
+
+    // Single delete button handler
+    document.querySelectorAll('.delete-user').forEach(button => {
+        button.addEventListener('click', function() {
+            const userId = this.getAttribute('data-user-id');
+            const userName = this.getAttribute('data-user-name');
+            selectedUsers = [{id: userId, name: userName}];
+            document.getElementById('selectedUsersText').textContent = `Selected user: ${userName}`;
+            deleteUserModal.show();
+        });
+    });
+
+    // Confirm delete handler
+    document.getElementById('confirmDeleteUser').addEventListener('click', function() {
+        const userIds = selectedUsers.map(user => user.id);
+
+        fetch('/admin/delete-users', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({user_ids: userIds})
+        }).then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Failed to delete users. Please try again.');
+            }
+        }).catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while deleting users');
+        });
+
+        deleteUserModal.hide();
+    });
+});
+</script>
+<script>
+  var element = document.getElementById('toast');
+  element.style.display = "block";
+  setTimeout(function() {
+    element.style.display = "none";
+  }, 3000); // 1000ms = 1 second
+</script>
+{% endblock %}

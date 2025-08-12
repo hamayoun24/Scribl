@@ -1,0 +1,31 @@
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <h5 class="alert-heading">No Writing Samples Yet</h5>
+                    <p class="mb-0">Add writing samples to start building this student's portfolio.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced text highlighting for portfolio -->
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Enhanced text highlighting for portfolio -->
+<script src="{{ url_for('static', filename='js/portfolio_highlighting.js') }}"></script>
+<script>
+  function saveAsWagollExample(writingId, assignmentId) {
+    // Get the text content of the writing sample
+    const textElement = document.querySelector(`#writing-${writingId} .sample-text`);
+    if (textElement) {
+      saveAsWagoll(textElement.innerHTML, writingId, assignmentId);
+    } else {
+      alert('Could not find text content for this writing sample');
+    }
+  }
+
+  function printWritingReport(writingId) {
+    window.open(`/writing/${writingId}/print_report`, '_blank');

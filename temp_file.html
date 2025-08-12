@@ -1,0 +1,983 @@
+{% extends "base.html" %}
+
+{% block title %}Student Portfolio - {{ student.name }}<!-- Enhanced text highlighting for portfolio -->
+<script src="{{ url_for("static", filename="js/portfolio_highlighting.js") }}"></script>
+{% endblock %}
+
+{% block extra_head %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Chart container styles */
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin-bottom: 1rem;
+            position: relative;
+        }
+
+        /* Custom styles for darker checkboxes */
+        .form-check-input {
+            background-color: #6c757d !important;
+            border-color: #495057 !important;
+        }
+
+        .form-check-input:checked {
+            background-color: var(--bs-primary) !important;
+            border-color: var(--bs-primary) !important;
+        }
+
+        /* Chart toggle styles */
+        .chart-toggle {
+            display: inline-flex;
+            background-color: #4a4a4a;
+            border-radius: 0.5rem;
+            padding: 0.25rem;
+            gap: 0.25rem;
+        }
+
+        .chart-toggle button {
+            border-radius: 0.25rem;
+            padding: 0.375rem 0.75rem;
+            border: none;
+            background: transparent;
+            color: var(--bs-light);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .chart-toggle button.active {
+            background-color: var(--bs-primary);
+            color: white;
+        }
+
+        /* Text content styling */
+        .text-content {
+            background-color: white;
+            color: #3E5D58;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            border: 1px solid rgba(62, 93, 88, 0.1);
+        }
+
+        /* Feedback sections styling */
+        .alert {
+            background-color: white;
+            color: #3E5D58;
+            border-color: rgba(62, 93, 88, 0.1);
+        }
+
+        /* Override bootstrap alert colors */
+        .alert h6, .alert p, .alert li, .alert pre {
+            color: #3E5D58 !important;
+        }
+
+        .bg-white {
+            background-color: white !important;
+        }
+
+        .text-dark {
+            color: #3E5D58 !important;
+        }
+
+        /* Form check label color fix */
+        .form-check-label {
+            color: var(--bs-body-color) !important;
+        }
+
+        /* Filename editing */
+        .edit-filename-btn {
+            visibility: hidden;
+            margin-left: 5px;
+            color: #3E5D58;
+        }
+
+        td:hover .edit-filename-btn {
+            visibility: visible;
+        }
+
+        .filename-input {
+            min-width: 120px;
+        }
+    </style>
+<!-- Enhanced text highlighting for portfolio -->
+<script src="{{ url_for("static", filename="js/portfolio_highlighting.js") }}"></script>
+{% endblock %}
+
+{% block content %}
+
+        <!-- Teaching Tip Container -->
+        <div id="teaching-tip" class="card mb-3 d-none">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <span class="me-2" style="font-size: 1.5em;">💡</span>
+                    <div>
+                        <p id="tip-content" class="mb-1"></p>
+                        <small id="tip-reference" class="text-muted"></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    <div class="container mt-0">
+        <!-- Teaching Tip Container -->
+        <div id="teaching-tip" class="card mb-3 d-none">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <span class="me-2" style="font-size: 1.5em;">💡</span>
+                    <div>
+                        <p id="tip-content" class="mb-1"></p>
+                        <small id="tip-reference" class="text-muted"></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row justify-content-center">
+            <div class="col-md-10">
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="d-flex align-items-center">
+                                {% with class_students = student.class_group.students|sort(attribute='name') %}
+                                {% set current_index = class_students|map(attribute='id')|list|index(student.id) %}
+                                {% set prev_index = (current_index - 1) % class_students|length %}
+                                {% set next_index = (current_index + 1) % class_students|length %}
+
+                                <a href="{{ url_for('student_portfolio', student_id=class_students[prev_index].id) }}"
+                                   class="btn btn-outline-primary btn-sm me-2" title="Previous Student">
+                                    <i class="fa fa-arrow-left"></i>
+                                </a>
+
+                                <div>
+                                    <h2 class="card-title mb-0">{{ student.name }}'s Portfolio</h2>
+                                </div>
+
+                                {% endwith %}
+                            </div>
+
+                            <div>
+                                <p class="text-muted mb-0">
+                                    Class: {{ student.class_group.name }} ({{ student.class_group.year_group }})
+                                    <br>
+                                    Date of Birth: {{ student.date_of_birth.strftime('%d %b %Y') }}
+                                </p>
+                            </div>
+
+                            <div class="d-flex align-items-center">
+                                <a href="{{ url_for('export_student_portfolio', student_id=student.id) }}"
+                                   class="btn btn-success btn-sm me-2">
+                                    <i class="fa fa-download me-1"></i>Export
+                                </a>
+
+                                {% with class_students = student.class_group.students|sort(attribute='name') %}
+                                {% set current_index = class_students|map(attribute='id')|list|index(student.id) %}
+                                {% set next_index = (current_index + 1) % class_students|length %}
+                                <a href="{{ url_for('student_portfolio', student_id=class_students[next_index].id) }}"
+                                   class="btn btn-outline-primary btn-sm" title="Next Student">
+                                    <i class="fa fa-arrow-right"></i>
+                                </a>
+                                {% endwith %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if student.writing_samples %}
+                <!-- Charts Section -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h3 class="card-title h5">Progress Analysis</h3>
+                            <div class="chart-toggle">
+                                <button type="button" class="active" data-graph="marks">Marks by Genre</button>
+                                <button type="button" data-graph="age">Age Comparison</button>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="marksChart"></canvas>
+                            <canvas id="ageChart" style="display: none;"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Writing Samples Table -->
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div class="d-flex align-items-center gap-3">
+                                <h3 class="card-title h5 mb-0">Writing Samples</h3>
+                                <button id="bulkDeleteBtn" class="btn btn-danger btn-sm" style="display: none;">
+                                    <i class="fa fa-trash"></i> Delete Selected
+                                </button>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAll">
+                                <label class="form-check-label" for="selectAll">Select All</label>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40px;"></th>
+                                        <th style="width: 120px;">Date</th>
+                                        <th>File Name</th>
+                                        <th style="width: 120px;">Genre</th>
+                                        <th style="width: 100px;">Age</th>
+                                        <th style="width: 120px;">Writing Age</th>
+                                        <th style="width: 120px;">Difference</th>
+                                        <th style="width: 100px;">Mark</th>
+                                        <th style="width: 100px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for sample in student.writing_samples|sort(attribute='created_at', reverse=true) %}
+                                    {% set student_age = ((sample.created_at.date() - student.date_of_birth).days / 365.25)|round(1) %}
+                                    {% set writing_age_str = sample.writing_age.replace('Estimated writing age:', '').strip().split() %}
+                                    {% set writing_age_years = writing_age_str[0]|float if writing_age_str|length > 0 else 0 %}
+                                    {% set writing_age_months = writing_age_str[2]|float / 12 if writing_age_str|length > 2 else 0 %}
+                                    {% set writing_age_total = writing_age_years + writing_age_months %}
+                                    {% set age_difference = (writing_age_total - student_age)|round(1) %}
+                                    <tr id="row-{{ sample.id }}">
+                                        <td>
+                                            <input class="form-check-input writing-sample-checkbox"
+                                                   type="checkbox"
+                                                   value="{{ sample.id }}">
+                                        </td>
+                                        <td>{{ sample.created_at.strftime('%d %b %Y') }}</td>
+                                        <td>
+                                            <span class="filename-display">{{ sample.filename }}</span>
+                                            <div class="filename-edit d-none">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="text" class="form-control form-control-sm filename-input" value="{{ sample.filename }}">
+                                                    <button class="btn btn-sm btn-success save-filename" data-id="{{ sample.id }}"><i class="fa fa-check"></i></button>
+                                                    <button class="btn btn-sm btn-secondary cancel-filename"><i class="fa fa-times"></i></button>
+                                                </div>
+                                            </div>
+                                            <button class="btn btn-sm btn-link p-0 edit-filename-btn"><i class="fa fa-pencil"></i></button>
+                                        </td>
+                                        <td>{{ sample.assignment.genre|title if sample.assignment else 'Free Writing' }}</td>
+                                        <td>{{ student_age }} years</td>
+                                        <td>{{ writing_age_total|round(1) }} years</td>
+                                        <td>
+                                            {% if age_difference > 0 %}
+                                                <span class="text-success">+{{ age_difference }} years</span>
+                                            {% else %}
+                                                <span class="text-danger">{{ age_difference }} years</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if sample.assignment %}
+                                                {% set total_possible_marks = sample.criteria_marks|length * 2 %}
+                                                {% set achieved_marks = sample.criteria_marks|sum(attribute='score') %}
+                                                {% set percentage = (achieved_marks / total_possible_marks * 100)|round|int %}
+                                                <div class="d-flex flex-column align-items-end">
+                                                    <span class="badge {% if percentage >= 80 %}bg-success{% elif percentage >= 60 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                        {{ percentage }}%
+                                                    </span>
+                                                    <small class="text-muted">
+                                                        {{ achieved_marks }}/{{ total_possible_marks }}
+                                                    </small>
+                                                </div>
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group">
+                                                <button class="btn btn-sm btn-outline-info" type="button"
+                                                        data-bs-toggle="collapse"
+                                                        data-bs-target="#sample{{ sample.id }}"
+                                                        aria-expanded="false">
+                                                    <i class="fa fa-chevron-down"></i>
+                                                </button>
+                                                <a href="{{ url_for('print_writing_report', writing_id=sample.id) }}"
+                                                   class="btn btn-sm btn-outline-success"
+                                                   target="_blank"
+                                                   title="Print Report">
+                                                    <i class="fa fa-print"></i>
+                                                </a>
+                                                <button class="btn btn-sm btn-outline-danger" type="button"
+                                                        onclick="deleteWritingSample({{ sample.id }}, '{{ sample.filename }}')">
+                                                    <i class="fa fa-trash"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-success" onclick="saveAsWagoll(document.getElementById('text-{{ sample.id }}').innerHTML, {{ sample.id }}, {{ sample.assignment_id if sample.assignment_id else 'null' }})">
+                                                    <i class="fa fa-star"></i> Save as WAGOLL
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan="8" class="p-0">
+                                            <div class="collapse" id="sample{{ sample.id }}">
+                                                <div class="p-3">
+                                                    <div class="mb-3">
+                                                        <h6>Full Text:</h6>
+                                                        <div class="text-content bg-white text-dark" id="writing-{{sample.id}}">
+                                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                                <div>
+                                                                    <button class="btn btn-sm btn-outline-primary toggle-highlight-mode" data-apply-ai-highlights="true">
+                                                                        <i class="fa fa-highlighter me-1"></i> Show Criteria Marking
+                                                                    </button>
+                                                                    {% if sample.assignment and sample.criteria_marks|length > 0 %}
+                                                                    <!-- Data element with criteria for highlight.js -->
+                                                                    <span class="badge bg-success ms-2 d-inline-flex align-items-center" title="This assignment has teacher-defined success criteria that will be highlighted in the text">
+                                                                        <i class="fa fa-check-circle me-1"></i> Teacher Criteria Available
+                                                                        <span class="badge bg-light text-dark ms-1">{{ sample.criteria_marks|length }}</span>
+                                                                    </span>
+                                                                    <div id="criteria-data-{{ sample.id }}" style="display: none;">
+                                                                        [
+                                                                            {% for mark in sample.criteria_marks %}
+                                                                            {
+                                                                                "criteria": {{ mark.criteria.description|tojson }},
+                                                                                "score": {{ mark.score }},
+                                                                                "justification": {{ mark.criteria.description|tojson }}
+                                                                            }{% if not loop.last %},{% endif %}
+                                                                            {% endfor %}
+                                                                        ]
+                                                                    </div>
+                                                                    {% endif %}
+                                                                </div>
+                                                                <div class="highlight-controls mt-2" style="display: none;">
+                                                                    <div class="d-flex align-items-center">
+                                                                        <span class="me-2">Choose color:</span>
+                                                                        <div class="btn-group highlight-colors">
+                                                                            <button class="btn btn-sm color-btn" style="background-color: #ffff00;" aria-label="Yellow" data-bs-toggle="tooltip" title="Yellow"></button>
+                                                                            <button class="btn btn-sm color-btn" style="background-color: #90ee90;" aria-label="Green" data-bs-toggle="tooltip" title="Green"></button>
+                                                                            <button class="btn btn-sm color-btn" style="background-color: #add8e6;" aria-label="Blue" data-bs-toggle="tooltip" title="Blue"></button>
+                                                                            <button class="btn btn-sm color-btn" style="background-color: #ffb6c1;" aria-label="Pink" data-bs-toggle="tooltip" title="Pink"></button>
+                                                                            <button class="btn btn-sm color-btn" style="background-color: #ffa500;" aria-label="Orange" data-bs-toggle="tooltip" title="Orange"></button>
+                                                                        </div>
+                                                                        <button class="btn btn-sm btn-outline-danger ms-2 clear-highlights" data-bs-toggle="tooltip" title="Clear all highlights">
+                                                                            <i class="fa fa-eraser"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="criteria-legend" style="display: none;">
+                                                                    <div class="criteria-legend-item">
+                                                                        <span class="criteria-legend-color" style="background-color: #90ee90;"></span> Fully met criteria (2/2)
+                                                                    </div>
+                                                                    <div class="criteria-legend-item">
+                                                                        <span class="criteria-legend-color" style="background-color: #ffff00;"></span> Partially met criteria (1/2)
+                                                                    </div>
+                                                                    <div class="criteria-legend-item">
+                                                                        <span class="criteria-legend-color" style="background-color: #ffb6c1;"></span> Criteria not met (0/2)
+                                                                    </div>
+                                                                </div>
+                                                                <div class="text-muted small mt-2 marking-instructions" style="display: none;">
+                                                                    <i class="fa fa-info-circle"></i> Text examples matching the teacher's success criteria are highlighted automatically.
+                                                                </div>
+                                                            </div>
+                                                            <pre class="mb-0 sample-text" id="text-{{ sample.id }}">{{ sample.text_content }}</pre>
+                                                            <div id="feedback-{{ sample.id }}" class="d-none">{{ sample.feedback }}</div>
+                                                        </div>
+                                                    </div>
+
+                                                    {% if sample.assignment %}
+                                                    <div class="alert bg-white text-dark border mb-3">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <div>
+                                                                <h6 class="alert-heading mb-0">Assignment Assessment</h6>
+                                                                <p class="mb-0">
+                                                                    <small>{{ sample.assignment.curriculum|title }} Curriculum - {{ sample.assignment.genre|title }}</small><br>
+                                                                    <small>Score: {{ sample.criteria_marks|sum(attribute='score') }}/{{ sample.criteria_marks|length * 2 }}
+                                                                    ({{ (sample.criteria_marks|sum(attribute='score') / (sample.criteria_marks|length * 2) * 100)|round|int }}%)</small>
+                                                                </p>
+                                                            </div>
+                                                            <button class="btn btn-sm btn-outline-info" type="button"
+                                                                    data-bs-toggle="collapse"
+                                                                    data-bs-target="#criteria{{ sample.id }}">
+                                                                <i class="fa fa-chevron-down"></i> View Details
+                                                            </button>
+                                                        </div>
+                                                        <div class="collapse mt-3" id="criteria{{ sample.id }}">
+                                                            <div class="list-group">
+                                                                {% for mark in sample.criteria_marks %}
+                                                                    <div class="list-group-item">
+                                                                        <div class="d-flex justify-content-between align-items-center">
+                                                                            <h6 class="mb-1">{{ mark.criteria.description }}</h6>
+                                                                            <span class="badge bg-{{ 'success' if mark.score == 2 else 'warning' if mark.score == 1 else 'danger' }}">
+                                                                                {{ mark.score }}/2
+                                                                            </span>
+                                                                        </div>
+                                                                        <p class="mb-0 small text-muted">{{ mark.justification }}</p>
+                                                                    </div>
+                                                                {% endfor %}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {% endif %}
+
+                                                    <div class="feedback-container">
+                                                        <div class="card mb-3">
+                                                            <div class="card-header" data-bs-toggle="collapse" data-bs-target="#strengths{{ sample.id }}">
+                                                                <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                                                    Key Strengths
+                                                                    <i class="fa fa-chevron-down"></i>
+                                                                </h5>
+                                                            </div>
+                                                            <div id="strengths{{ sample.id }}" class="collapse show">
+                                                                <div class="card-body">
+                                                                    <ul class="custom-bullet-list" id="strengths-list-{{ sample.id }}">
+                                                                        <!-- Strengths will be populated by JavaScript -->
+                                                                    </ul>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div class="card">
+                                                            <div class="card-header" data-bs-toggle="collapse" data-bs-target="#development{{ sample.id }}">
+                                                                <h5 class="mb-0 d-flex justify-content-between align-items-center">
+                                                                    Areas for Development
+                                                                    <i class="fa fa-chevron-down"></i>
+                                                                </h5>
+                                                            </div>
+                                                            <div id="development{{ sample.id }}" class="collapse show">
+                                                                <div class="card-body">
+                                                                    <ul class="custom-bullet-list" id="development-list-{{ sample.id }}">
+                                                                        <!-- Development areas will be populated by JavaScript -->
+                                                                    </ul>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <!-- Hidden div to store the original feedback -->
+                                                        <div class="d-none" id="raw-feedback-{{ sample.id }}">{{ sample.feedback|safe }}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <h5 class="alert-heading">No Writing Samples Yet</h5>
+                    <p class="mb-0">Add writing samples to start building this student's portfolio.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Enhanced text highlighting for portfolio -->
+<script src="{{ url_for("static", filename="js/portfolio_highlighting.js") }}"></script>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  function saveAsWagollExample(writingId, assignmentId) {
+    // Get the text content of the writing sample
+    const textElement = document.querySelector(`#writing-${writingId} .sample-text`);
+    if (textElement) {
+      saveAsWagoll(textElement.innerHTML, writingId, assignmentId);
+    } else {
+      alert('Could not find text content for this writing sample');
+    }
+  }
+
+  function printWritingReport(writingId) {
+    window.open(`/writing/${writingId}/print_report`, '_blank');
+  }
+
+    // Text highlighting functionality
+    function setupTextHighlighting() {
+        const toggleButtons = document.querySelectorAll('.toggle-highlight-mode');
+
+        toggleButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const textContainer = this.closest('.text-content');
+                const highlightControls = textContainer.querySelector('.highlight-controls');
+                const textElement = textContainer.querySelector('.sample-text');
+                
+                // Get the writing sample ID from the text element's ID (format: text-XX)
+                const sampleId = textElement ? textElement.id.replace('text-', '') : null;
+                console.log('Toggle highlight for sample ID:', sampleId);
+
+                // Toggle highlight mode
+                const isActive = this.classList.toggle('active');
+                highlightControls.style.display = isActive ? 'block' : 'none';
+
+                if (isActive) {
+                    this.innerHTML = '<i class="fa fa-times me-1"></i> Exit Marking Mode';
+                    this.classList.remove('btn-outline-primary');
+                    this.classList.add('btn-primary');
+
+                    // Show the criteria legend and instructions
+                    const criteriaLegend = textContainer.querySelector('.criteria-legend');
+                    const markingInstructions = textContainer.querySelector('.marking-instructions');
+                    if (criteriaLegend) criteriaLegend.style.display = 'block';
+                    if (markingInstructions) markingInstructions.style.display = 'block';
+                    
+                    // Check if this button has AI highlights data attribute
+                    if (this.getAttribute('data-apply-ai-highlights') === 'true') {
+                        // Call the AI highlighting function from highlighting.js
+                        console.log('Applying AI highlights to text element with ID:', textElement.id);
+                        
+                        // Populate strengths and development areas if they're not already displayed
+                        populateAnalysisData(sampleId);
+                        
+                        // Apply AI highlights to the text
+                        applyAIHighlights(textElement);
+                    } else {
+                        // Enable text selection for manual highlighting
+                        textElement.style.userSelect = 'text';
+                        
+                        // Setup color buttons
+                        const colorButtons = textContainer.querySelectorAll('.highlight-colors button');
+                        colorButtons.forEach(colorBtn => {
+                            colorBtn.addEventListener('click', function() {
+                                // Set active color
+                                colorButtons.forEach(btn => btn.classList.remove('active'));
+                                this.classList.add('active');
+
+                                // Store the selected color
+                                textContainer.dataset.activeColor = this.style.backgroundColor;
+                            });
+                        });
+
+                        // Set default color (yellow)
+                        colorButtons[0].click();
+
+                        // Setup highlighting on selection
+                        textElement.addEventListener('mouseup', highlightSelection);
+                    }
+
+                    // Setup clear highlights
+                    const clearButton = textContainer.querySelector('.clear-highlights');
+                    clearButton.addEventListener('click', function() {
+                        textElement.innerHTML = textElement.textContent;
+                    });
+                } else {
+                    this.innerHTML = '<i class="fa fa-highlighter me-1"></i> Show Criteria Marking';
+                    this.classList.remove('btn-primary');
+                    this.classList.add('btn-outline-primary');
+
+                    // Hide the criteria legend and instructions
+                    const criteriaLegend = textContainer.closest('.text-content').querySelector('.criteria-legend');
+                    const markingInstructions = textContainer.closest('.text-content').querySelector('.marking-instructions');
+                    if (criteriaLegend) criteriaLegend.style.display = 'none';
+                    if (markingInstructions) markingInstructions.style.display = 'none';
+
+                    // Disable text selection for highlighting
+                    textElement.style.userSelect = 'auto';
+
+                    // Remove event listener
+                    textElement.removeEventListener('mouseup', highlightSelection);
+                }
+            });
+        });
+
+        // Function to highlight selected text
+        function highlightSelection(e) {
+            const selection = window.getSelection();
+            if (selection.toString().length > 0) {
+                const textContainer = this.closest('.text-content');
+                const color = textContainer.dataset.activeColor || '#ffff00';
+
+                const range = selection.getRangeAt(0);
+                const selectedText = selection.toString();
+
+                // Create a span with the highlight
+                const highlightSpan = document.createElement('span');
+                highlightSpan.style.backgroundColor = color;
+                highlightSpan.textContent = selectedText;
+
+                // Replace the selected text with the highlighted span
+                range.deleteContents();
+                range.insertNode(highlightSpan);
+
+                // Clear the selection
+                selection.removeAllRanges();
+            }
+        }
+    }
+
+    // Function to process raw feedback and populate the UI with formatted data
+    function populateAnalysisData(sampleId) {
+        if (!sampleId) return;
+        
+        const strengthsList = document.getElementById(`strengths-list-${sampleId}`);
+        const developmentList = document.getElementById(`development-list-${sampleId}`);
+        
+        // Check if lists are already populated
+        if (strengthsList && strengthsList.children.length === 0) {
+            // Get the feedback from the hidden field if available
+            const feedbackElement = document.getElementById(`feedback-${sampleId}`);
+            if (feedbackElement && feedbackElement.textContent) {
+                const feedback = feedbackElement.textContent;
+                console.log(`Processing feedback for sample ${sampleId}`);
+                
+                // Extract strengths section
+                const strengthsMatch = feedback.match(/Strengths:([sS]*?)(?:Areas for Development:|$)/i);
+                if (strengthsMatch && strengthsList) {
+                    const strengthsPoints = strengthsMatch[1].trim().split("\n").map(point => 
+                        point.trim().replace(/^-\s*/, "")
+                    ).filter(point => point.length > 0);
+                    
+                    // Add each strength point as a list item
+                    strengthsPoints.forEach(point => {
+                        const li = document.createElement("li");
+                        li.textContent = point;
+                        strengthsList.appendChild(li);
+                    });
+                    
+                    // If no strengths were found, add a message
+                    if (strengthsList.children.length === 0) {
+                        const li = document.createElement("li");
+                        li.textContent = "No specific strengths identified.";
+                        strengthsList.appendChild(li);
+                    }
+                }
+                
+                // Extract development section
+                const developmentMatch = feedback.match(/Areas for Development:([sS]*?)(?:Writing Age:|$)/i);
+                if (developmentMatch && developmentList) {
+                    const developmentPoints = developmentMatch[1].trim().split("\n").map(point => 
+                        point.trim().replace(/^-\s*/, "")
+                    ).filter(point => point.length > 0);
+                    
+                    // Add each development point as a list item
+                    developmentPoints.forEach(point => {
+                        const li = document.createElement("li");
+                        li.textContent = point;
+                        developmentList.appendChild(li);
+                    });
+                    
+                    // If no development areas were found, add a message
+                    if (developmentList.children.length === 0) {
+                        const li = document.createElement("li");
+                        li.textContent = "No specific areas for development identified.";
+                        developmentList.appendChild(li);
+                    }
+                }
+            }
+        }
+    }
+    function processFeedback() {
+        // Get all writing samples on the page
+        const writingSamples = document.querySelectorAll('[id^="writing-"]');
+        
+        writingSamples.forEach(sample => {
+            const sampleId = sample.id.split('-')[1];
+            const rawFeedbackElement = document.getElementById(`raw-feedback-${sampleId}`);
+            
+            if (rawFeedbackElement && rawFeedbackElement.textContent.trim()) {
+                const rawFeedback = rawFeedbackElement.textContent;
+                
+                // Find the strengths and development sections in the raw feedback
+                const strengthsMatch = rawFeedback.match(/Strengths:([\s\S]*?)(?=Areas for Development:|$)/);
+                const developmentMatch = rawFeedback.match(/Areas for Development:([\s\S]*?)(?=\n\n|$)/);
+                
+                // Process strengths
+                if (strengthsMatch && strengthsMatch[1]) {
+                    const strengthsList = document.getElementById(`strengths-list-${sampleId}`);
+                    if (strengthsList) {
+                        const strengthsPoints = strengthsMatch[1].trim().split('\n').map(point => 
+                            point.trim().replace(/^-\s*/, '')
+                        ).filter(point => point.length > 0);
+                        
+                        strengthsList.innerHTML = '';
+                        strengthsPoints.forEach(point => {
+                            const li = document.createElement('li');
+                            li.innerHTML = point;
+                            strengthsList.appendChild(li);
+                        });
+                    }
+                }
+                
+                // Process areas for development
+                if (developmentMatch && developmentMatch[1]) {
+                    const developmentList = document.getElementById(`development-list-${sampleId}`);
+                    if (developmentList) {
+                        const developmentPoints = developmentMatch[1].trim().split('\n').map(point => 
+                            point.trim().replace(/^-\s*/, '')
+                        ).filter(point => point.length > 0);
+                        
+                        developmentList.innerHTML = '';
+                        developmentPoints.forEach(point => {
+                            const li = document.createElement('li');
+                            li.innerHTML = point;
+                            developmentList.appendChild(li);
+                        });
+                    }
+                }
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize text highlighting
+        setupTextHighlighting();
+        // Process feedback for all writing samples
+        // Display an educational teaching tip
+        displayRandomTeachingTip();
+        processFeedback();
+        {% if student.writing_samples %}
+        // Prepare data for charts
+        const samples = [
+            {% for sample in student.writing_samples|sort(attribute='created_at') %}
+            {% set student_age = ((sample.created_at.date() - student.date_of_birth).days / 365.25)|round(1) %}
+            {% set writing_age_str = sample.writing_age.replace('Estimated writing age:', '').strip().split() %}
+            {% set writing_age_years = writing_age_str[0]|float if writing_age_str|length > 0 else 0 %}
+            {% set writing_age_months = writing_age_str[2]|float / 12 if writing_age_str|length > 2 else 0 %}
+            {% set writing_age_total = writing_age_years + writing_age_months %}
+            {
+                genre: '{{ sample.assignment.genre|title if sample.assignment else "Free Writing" }}',
+                date: '{{ sample.created_at.strftime("%d %b %Y") }}',
+                studentAge: {{ student_age }},
+                writingAge: {{ writing_age_total|round(1) }},
+                marks: {% if sample.assignment %}
+                    {{ (sample.criteria_marks|sum(attribute='score') / (sample.criteria_marks|length * 2) * 100)|round|int }}
+                {% else %}
+                    null
+                {% endif %}
+            },
+            {% endfor %}
+        ];
+
+        // Get unique genres maintaining chronological order
+        const genres = [...new Set(samples.map(s => s.genre))];
+
+        // Initialize charts
+        const marksCtx = document.getElementById('marksChart').getContext('2d');
+        const ageCtx = document.getElementById('ageChart').getContext('2d');
+
+        // Marks by Genre Chart
+        const marksChart = new Chart(marksCtx, {
+            type: 'line',
+            data: {
+                labels: samples.map(s => `${s.genre}\n${s.date}`),
+                datasets: [{
+                    label: 'Assignment Score',
+                    data: samples.map(s => s.marks),
+                    backgroundColor: 'rgba(25, 135, 84, 0.2)',
+                    borderColor: 'rgb(25, 135, 84)',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Score (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Genre and Date'
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+
+        // Age Comparison Chart
+        const ageChart = new Chart(ageCtx, {
+            type: 'line',
+            data: {
+                labels: samples.map(s => `${s.genre}\n${s.date}`),
+                datasets: [{
+                    label: 'Writing Age',
+                    data: samples.map(s => s.writingAge),
+                    borderColor: 'rgb(25, 135, 84)',
+                    backgroundColor: 'rgba(25, 135, 84, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }, {
+                    label: 'Actual Age',
+                    data: samples.map(s => s.studentAge),
+                    borderColor: 'rgb(13, 110, 253)',
+                    backgroundColor: 'rgba(13, 110, 253, 0.2)',
+                    borderWidth: 2,
+                    tension: 0.1,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Age (Years)'
+                        },
+                        min: Math.floor(Math.min(
+                            ...samples.map(s => s.studentAge),
+                            ...samples.map(s => s.writingAge)
+                        )) - 0.5,
+                        max: Math.ceil(Math.max(
+                            ...samples.map(s => s.studentAge),
+                            ...samples.map(s => s.writingAge)
+                        )) + 0.5
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Genre and Date'
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+
+        // Chart toggle functionality
+        const toggleButtons = document.querySelectorAll('.chart-toggle button');
+        const chartCanvases = {
+            'marks': document.getElementById('marksChart'),
+            'age': document.getElementById('ageChart')
+        };
+
+        toggleButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const graphType = this.dataset.graph;
+                toggleButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+
+                Object.entries(chartCanvases).forEach(([type, canvas]) => {
+                    canvas.style.display = type === graphType ? 'block' : 'none';
+                });
+            });
+        });
+
+        {% endif %}
+
+        // Select all functionality
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const sampleCheckboxes = document.querySelectorAll('.writing-sample-checkbox');
+        const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                sampleCheckboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+                updateBulkDeleteButton();
+            });
+
+            sampleCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    updateBulkDeleteButton();
+                    selectAllCheckbox.checked = Array.from(sampleCheckboxes)
+                        .every(cb => cb.checked);
+                });
+            });
+        }
+
+        function updateBulkDeleteButton() {
+            const checkedBoxes = document.querySelectorAll('.writing-sample-checkbox:checked');
+            if (bulkDeleteBtn) {
+                bulkDeleteBtn.style.display = checkedBoxes.length > 0 ? 'block' : 'none';
+            }
+        }
+    });
+
+    function deleteWritingSample(sampleId, filename) {
+        if (confirm(`Are you sure you want to delete the writing sample "${filename}"?`)) {
+            fetch(`/writing/${sampleId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete writing sample');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the writing sample');
+            });
+        }
+    }
+
+    // Add event listeners for filename editing
+    document.addEventListener('DOMContentLoaded', function() {
+        // Edit filename button click
+        document.querySelectorAll('.edit-filename-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const cell = this.closest('td');
+                cell.querySelector('.filename-display').classList.add('d-none');
+                cell.querySelector('.filename-edit').classList.remove('d-none');
+                this.classList.add('d-none');
+            });
+        });
+
+        // Cancel filename edit
+        document.querySelectorAll('.cancel-filename').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const cell = this.closest('td');
+                cell.querySelector('.filename-display').classList.remove('d-none');
+                cell.querySelector('.filename-edit').classList.add('d-none');
+                cell.querySelector('.edit-filename-btn').classList.remove('d-none');
+            });
+        });
+
+        // Save filename
+        document.querySelectorAll('.save-filename').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const writingId = this.dataset.id;
+                const cell = this.closest('td');
+                const newFilename = cell.querySelector('.filename-input').value.trim();
+
+                if (!newFilename) {
+                    alert('Filename cannot be empty');
+                    return;
+                }
+
+                fetch(`/writing/${writingId}/update_filename`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: newFilename })
+                }).then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error('Failed to update filename');
+                    }
+                }).then(data => {
+                    cell.querySelector('.filename-display').textContent = newFilename;
+                    cell.querySelector('.filename-display').classList.remove('d-none');
+                    cell.querySelector('.filename-edit').classList.add('d-none');
+                    cell.querySelector('.edit-filename-btn').classList.remove('d-none');
+                }).catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while updating the filename');
+                });
+            });
+        });
+    });
+</script>
+<!-- Enhanced text highlighting for portfolio -->
+<script src="{{ url_for("static", filename="js/portfolio_highlighting.js") }}"></script>
+{% endblock %}

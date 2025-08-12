@@ -1,0 +1,643 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import criteria_display_score with context %}
+
+{% block extra_head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chart-styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Sample table styles */
+        .sample-table th {
+            vertical-align: middle;
+        }
+
+        /* Filename editing styles */
+        .filename-edit {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .filename-edit input {
+            min-width: 150px;
+        }
+
+        .filename-edit button {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .edit-filename-btn {
+            cursor: pointer;
+            color: #6c757d;
+            transition: color 0.2s;
+        }
+
+        .edit-filename-btn:hover {
+            color: var(--bs-primary);
+        }
+
+        /* Criteria boxes for student portfolio */
+        .criteria-box {
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.25rem;
+            transition: background-color 0.3s;
+        }
+
+        .criteria-score-0 {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+
+        .criteria-score-1 {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+
+        .criteria-score-2 {
+            background-color: #d1e7dd;
+            border-left: 4px solid #198754;
+        }
+
+        /* Writing sample container */
+        .sample-container {
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        .sample-header {
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .sample-content {
+            padding: 1rem;
+        }
+
+        .sample-footer {
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        /* Portfolio-specific highlighting */
+        .text-content .sample-text {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            white-space: pre-wrap;
+            line-height: 1.8;
+            font-size: 1.1rem;
+        }
+        
+        /* Print button */
+        .print-btn {
+            cursor: pointer;
+        }
+
+        /* Bulk actions */
+        #bulkDeleteBtn {
+            display: none;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <div class="container-fluid py-4">
+        <nav aria-label="breadcrumb" class="mb-4">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('classes') }}">Classes</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('classes') }}">{{ student.class_group.name }} ({{ student.class_group.year_group }})</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ student.name() }}</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3">{{ student.name() }}'s Portfolio</h1>
+            <div>
+                <a href="{{ url_for('export_student_portfolio', student_id=student.id) }}" class="btn btn-outline-secondary me-2">
+                    <i class="fas fa-file-export"></i> Export Portfolio
+                </a>
+                <a href="{{ url_for('classes') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Class
+                </a>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h2 class="card-title h5 mb-3">Student Information</h2>
+                        <ul class="list-unstyled">
+                            <li><strong>Full Name:</strong> {{ student.name() }}</li>
+                            <li><strong>Student ID:</strong> {{ student.student_id or 'Not assigned' }}</li>
+                            <li><strong>Date of Birth:</strong> {{ student.date_of_birth.strftime('%d %B %Y') }}</li>
+                            <li><strong>Age:</strong> {{ ((date.today() - student.date_of_birth).days / 365.25)|round(1) }} years</li>
+                            <li><strong>Class:</strong> {{ student.class_group.name }} ({{ student.class_group.year_group }})</li>
+                            <li><strong>Writing Samples:</strong> {{ student.writing_samples|length }}</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                {% if student.writing_samples %}
+                <!-- Charts Section -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h3 class="card-title h5">Progress Analysis</h3>
+                            <div class="chart-toggle">
+                                <button type="button" class="active" data-graph="marks">Marks by Genre</button>
+                                <button type="button" data-graph="age">Age Comparison</button>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="marksChart"></canvas>
+                            <canvas id="ageChart" style="display: none;"></canvas>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="card mb-4">
+                    <div class="card-body text-center py-5">
+                        <h3 class="card-title h5 mb-3">No Writing Samples</h3>
+                        <p class="text-muted">This student doesn't have any writing samples yet.</p>
+                        <a href="{{ url_for('add_writing') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add Writing Sample
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h2 class="h5 mb-0">Writing Samples</h2>
+                <div>
+                    {% if student.writing_samples|length > 0 %}
+                    <button id="bulkDeleteBtn" class="btn btn-outline-danger me-2" data-bs-toggle="modal" data-bs-target="#bulkDeleteModal">
+                        <i class="fas fa-trash"></i> Delete Selected
+                    </button>
+                    {% endif %}
+                    <a href="{{ url_for('add_writing') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Writing Sample
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if student.writing_samples|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-hover sample-table">
+                        <thead>
+                            <tr>
+                                <th width="30">
+                                    {% if student.writing_samples|length > 1 %}
+                                    <input type="checkbox" class="form-check-input" id="selectAll">
+                                    {% endif %}
+                                </th>
+                                <th width="220">Filename</th>
+                                <th>Assignment</th>
+                                <th>Genre</th>
+                                <th>Date</th>
+                                <th width="120">Writing Age</th>
+                                <th width="120">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sample in student.writing_samples|sort(attribute='created_at', reverse=True) %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input writing-sample-checkbox" 
+                                           value="{{ sample.id }}" data-filename="{{ sample.filename }}">
+                                </td>
+                                <td>
+                                    <span class="filename-display">{{ sample.filename }}</span>
+                                    <div class="filename-edit d-none">
+                                        <input type="text" class="form-control form-control-sm" 
+                                               value="{{ sample.filename }}" data-writing-id="{{ sample.id }}">
+                                        <button class="btn btn-sm btn-success save-filename">Save</button>
+                                        <button class="btn btn-sm btn-outline-secondary cancel-filename">Cancel</button>
+                                    </div>
+                                    <i class="fas fa-edit edit-filename-btn ms-2" title="Edit filename"></i>
+                                </td>
+                                <td>{{ sample.assignment.title if sample.assignment else 'Unassigned' }}</td>
+                                <td>{{ sample.assignment.genre if sample.assignment else 'Unknown' }}</td>
+                                <td>{{ sample.created_at.strftime('%d %b %Y') }}</td>
+                                <td>{{ sample.writing_age or 'Not analyzed' }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary print-btn me-1" 
+                                            onclick="printWritingReport({{ sample.id }})" title="Print Report">
+                                        <i class="fas fa-print"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="deleteWritingSample({{ sample.id }}, '{{ sample.filename }}')" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Bulk Delete Modal -->
+                <div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-labelledby="bulkDeleteModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="bulkDeleteModalLabel">Confirm Deletion</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Are you sure you want to delete the selected writing samples? This action cannot be undone.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <form action="{{ url_for('bulk_delete_writing') }}" method="post">
+                                    <input type="hidden" name="writing_ids" id="selectedWritingIds" value="">
+                                    <input type="hidden" name="student_id" value="{{ student.id }}">
+                                    <button type="submit" class="btn btn-danger">Delete Selected</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <p class="text-muted">This student doesn't have any writing samples yet.</p>
+                    <a href="{{ url_for('add_writing') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Writing Sample
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if student.writing_samples|length > 0 %}
+        <h2 class="h4 mb-4">Detailed Writing Samples</h2>
+        
+        {% for sample in student.writing_samples|sort(attribute='created_at', reverse=True) %}
+        <div class="sample-container" id="sample-{{ sample.id }}">
+            <div class="sample-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h3 class="h5 mb-0">{{ sample.filename }}</h3>
+                    <span class="badge bg-{% if sample.assignment %}primary{% else %}secondary{% endif %}">
+                        {{ sample.assignment.title if sample.assignment else 'Unassigned' }}
+                    </span>
+                </div>
+                <div class="text-muted small mt-1">
+                    Submitted on {{ sample.created_at.strftime('%d %B %Y') }}
+                    {% if sample.assignment %} 
+                    | Genre: {{ sample.assignment.genre }}
+                    {% endif %}
+                    {% if sample.writing_age %}
+                    | Writing Age: {{ sample.writing_age }}
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="sample-content">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="text-content mb-3">
+                            <div class="sample-text" id="text-{{ sample.id }}">{{ sample.text_content }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="h6 mb-0">Teacher Feedback</h4>
+                            </div>
+                            <div class="card-body">
+                                {% if sample.feedback %}
+                                <div class="mb-3">
+                                    {{ sample.feedback|nl2br }}
+                                </div>
+                                {% else %}
+                                <p class="text-muted">No feedback provided yet.</p>
+                                {% endif %}
+                                
+                                {% if sample.assignment and sample.assignment.criteria|length > 0 %}
+                                <div class="mt-4">
+                                    <h5 class="h6">Criteria Assessment</h5>
+                                    {% for criteria_mark in sample.criteria_marks %}
+                                    <div class="criteria-box criteria-score-{{ criteria_mark.score }}">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span>{{ criteria_mark.criteria.description }}</span>
+                                            <span class="badge bg-{{ ['danger', 'warning', 'success'][criteria_mark.score] }}">
+                                                {{ ['Not Met', 'Partially Met', 'Confident'][criteria_mark.score] }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sample-footer">
+                <button class="btn btn-sm btn-outline-primary" onclick="printWritingReport({{ sample.id }})">
+                    <i class="fas fa-print"></i> Print Report
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function printWritingReport(writingId) {
+    window.open(`/writing/${writingId}/print_report`, '_blank');
+  }
+  
+  document.addEventListener('DOMContentLoaded', function() {
+    {% if student.writing_samples %}
+    // Process writing samples data for charts
+    const samples = [
+      {% for sample in student.writing_samples %}
+      {
+        id: {{ sample.id }},
+        filename: {{ sample.filename|tojson }},
+        assignment: {{ sample.assignment.title if sample.assignment else 'Unassigned'|tojson }},
+        genre: {{ sample.assignment.genre if sample.assignment else 'Unknown'|tojson }},
+        date: {{ sample.created_at.strftime('%Y-%m-%d')|tojson }},
+        writingAge: {{ sample.writing_age|replace('Years', '')|float if sample.writing_age else 0 }},
+        studentAge: {{ ((date.today() - sample.student.date_of_birth).days / 365.25)|round(1) }},
+        criteriaMarks: [
+          {% for mark in sample.criteria_marks %}
+          {
+            criteria: {{ mark.criteria.description|tojson }},
+            score: {{ mark.score }}
+          }{% if not loop.last %},{% endif %}
+          {% endfor %}
+        ]
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ];
+    
+    // Initialize Marks by Genre Chart
+    const marksCtx = document.getElementById("marksChart").getContext("2d");
+    const marksChart = new Chart(marksCtx, {
+      type: "bar",
+      data: {
+        labels: samples.map(s => `${s.genre}: ${s.date}`),
+        datasets: [{
+          label: "Achievement Score (%)",
+          data: samples.map(s => {
+            if (s.criteriaMarks.length === 0) return 0;
+            const totalPossible = s.criteriaMarks.length * 2;
+            const achieved = s.criteriaMarks.reduce((sum, mark) => sum + mark.score, 0);
+            return Math.round(achieved / totalPossible * 100);
+          }),
+          backgroundColor: "rgba(75, 192, 192, 0.2)",
+          borderColor: "rgba(75, 192, 192, 1)",
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "top",
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                return `Achievement: ${context.raw}%`;
+              }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            title: {
+              display: true,
+              text: "Achievement (%)"
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: "Genre and Date"
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45
+            }
+          }
+        }
+      }
+    });
+    
+    // Initialize Age Comparison Chart
+    const ageCtx = document.getElementById('ageChart').getContext('2d');
+    const ageChart = new Chart(ageCtx, {
+      type: 'line',
+      data: {
+        labels: samples.map(s => `${s.genre}: ${s.date}`),
+        datasets: [
+          {
+            label: 'Student Age',
+            data: samples.map(s => s.studentAge),
+            borderColor: '#4285F4',
+            backgroundColor: 'rgba(66, 133, 244, 0.1)',
+            fill: false,
+            tension: 0.4
+          },
+          {
+            label: 'Writing Age',
+            data: samples.map(s => s.writingAge),
+            borderColor: '#34A853',
+            backgroundColor: 'rgba(52, 168, 83, 0.1)',
+            fill: false,
+            tension: 0.4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'top',
+          },
+          tooltip: {
+            mode: 'index',
+            intersect: false,
+          }
+        },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Age (Years)'
+            },
+            min: Math.floor(Math.min(
+              ...samples.map(s => s.studentAge),
+              ...samples.map(s => s.writingAge)
+            )) - 0.5,
+            max: Math.ceil(Math.max(
+              ...samples.map(s => s.studentAge),
+              ...samples.map(s => s.writingAge)
+            )) + 0.5
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Genre and Date'
+            },
+            ticks: {
+              maxRotation: 45,
+              minRotation: 45
+            }
+          }
+        }
+      }
+    });
+
+    // Chart toggle functionality
+    const toggleButtons = document.querySelectorAll('.chart-toggle button');
+    const chartCanvases = {
+        'marks': document.getElementById('marksChart'),
+        'age': document.getElementById('ageChart')
+    };
+
+    toggleButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const graphType = this.dataset.graph;
+            toggleButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+
+            Object.entries(chartCanvases).forEach(([type, canvas]) => {
+                canvas.style.display = type === graphType ? 'block' : 'none';
+            });
+        });
+    });
+
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const sampleCheckboxes = document.querySelectorAll('.writing-sample-checkbox');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            sampleCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateBulkDeleteButton();
+        });
+
+        sampleCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                updateBulkDeleteButton();
+                selectAllCheckbox.checked = Array.from(sampleCheckboxes)
+                    .every(cb => cb.checked);
+            });
+        });
+    }
+
+    function updateBulkDeleteButton() {
+        const checkedBoxes = document.querySelectorAll('.writing-sample-checkbox:checked');
+        if (bulkDeleteBtn) {
+            bulkDeleteBtn.style.display = checkedBoxes.length > 0 ? 'block' : 'none';
+        }
+    }
+    
+    // Apply highlighting to all sample texts
+    document.querySelectorAll('.sample-text').forEach(textElement => {
+        if (window.applyAIHighlights) {
+            window.applyAIHighlights(textElement);
+        }
+    });
+    {% endif %}
+
+    function deleteWritingSample(sampleId, filename) {
+        if (confirm(`Are you sure you want to delete the writing sample "${filename}"?`)) {
+            fetch(`/writing/${sampleId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete writing sample');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the writing sample');
+            });
+        }
+    }
+
+    // Add event listeners for filename editing
+    document.querySelectorAll('.edit-filename-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const cell = this.closest('td');
+            cell.querySelector('.filename-display').classList.add('d-none');
+            cell.querySelector('.filename-edit').classList.remove('d-none');
+            this.classList.add('d-none');
+        });
+    });
+
+    // Cancel filename edit
+    document.querySelectorAll('.cancel-filename').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const cell = this.closest('td');
+            cell.querySelector('.filename-display').classList.remove('d-none');
+            cell.querySelector('.filename-edit').classList.add('d-none');
+            cell.querySelector('.edit-filename-btn').classList.remove('d-none');
+        });
+    });
+
+    // Save filename edit
+    document.querySelectorAll('.save-filename').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const cell = this.closest('td');
+            const input = cell.querySelector('.filename-edit input');
+            const writingId = input.dataset.writingId;
+            const newFilename = input.value.trim();
+            
+            if (!newFilename) {
+                alert('Filename cannot be empty');
+                return;
+            }
+            
+            fetch(`/writing/${writingId}/update_filename`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ filename: newFilename })
+            }).then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('Failed to update filename');
+                }
+            }).then(data => {
+                cell.querySelector('.filename-display').textContent = newFilename;
+                cell.querySelector('.filename-display').classList.remove('d-none');
+                cell.querySelector('.filename-edit').classList.add('d-none');
+                cell.querySelector('.edit-filename-btn').classList.remove('d-none');
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating the filename');
+            });
+        });
+    });
+  });
+</script>
+{% endblock %}

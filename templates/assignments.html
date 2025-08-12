@@ -1,0 +1,725 @@
+{% extends "base.html" %}
+
+{% block title %}Assignments - Text Analysis{% endblock %}
+
+{% block extra_head %}
+<style>
+    .sortable {
+        cursor: pointer;
+    }
+    .sortable:hover {
+        background-color: rgba(255,255,255,0.1);
+    }
+    .sort-icon::after {
+        content: "↕";
+        margin-left: 5px;
+        opacity: 0.5;
+    }
+    .sort-asc::after {
+        content: "↑";
+        opacity: 1;
+    }
+    .sort-desc::after {
+        content: "↓";
+        opacity: 1;
+    }
+
+    /* Add color coding for marks */
+    .mark-high {
+        color: #198754;
+    }
+    .mark-medium {
+        color: #ffc107;
+    }
+    .mark-low {
+        color: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <!-- Modal for Whole Class Feedback -->
+            <div class="modal fade" id="classFeedbackModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Whole Class Analysis</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="feedbackLoading" class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">Analyzing class submissions...</p>
+                            </div>
+                            <div id="feedbackContent" style="display: none;">
+                                <div class="mb-4">
+                                    <h6 class="mb-3">Class Strengths</h6>
+                                    <div id="classStrengths" class="alert alert-success"></div>
+                                </div>
+                                <div class="mb-4">
+                                    <h6 class="mb-3">Areas for Development</h6>
+                                    <div id="classDevelopment" class="alert alert-danger"></div>
+                                </div>
+                                <div>
+                                    <h6 class="mb-3">Suggested Practice Activities</h6>
+                                    <div id="practiceActivities" class="alert" style="background-color: white; color: #66AD8D; border: 1px solid rgba(102, 173, 141, 0.2);"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal for WAGOLL (What A Good One Looks Like) -->
+            <div class="modal fade" id="wagollModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">WAGOLL - What A Good One Looks Like</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="wagollLoading" class="text-center">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2">Generating an exemplary response based on success criteria...</p>
+                            </div>
+                            <div id="wagollContent" style="display: none;">
+                                <div class="mb-3">
+                                    <h6 class="mb-2">Assignment: <span id="wagollAssignmentTitle"></span></h6>
+                                    <p class="text-muted small">This exemplary response demonstrates meeting all the success criteria at a high level.</p>
+                                </div>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div id="wagollText" class="sample-text p-3 border bg-light"></div>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <h6 class="mb-2">Why this is a good example:</h6>
+                                    <div id="wagollExplanation" class="alert" style="background-color: white; color: #66AD8D; border: 1px solid rgba(102, 173, 141, 0.2);"></div>
+                                </div>
+                                <div class="d-flex justify-content-end mt-3">
+                                    <button class="btn btn-primary" onclick="copyWagollToClipboard()">
+                                        <i class="fa fa-copy me-1"></i> Copy to Clipboard
+                                    </button>
+                                    <button class="btn btn-success" onclick="saveWagollExample()">
+                                        <i class="fa fa-save me-1"></i> Save Example
+                                    </button>
+                                    <label for="wagollPublic" class="form-check-label">
+                                        <input type="checkbox" class="form-check-input" id="wagollPublic"> Public
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="wagollLibrary" style="display: none;">
+                                <h6 class="mb-2">Saved WAGOLL Examples:</h6>
+                                <div class="list-group" id="wagollExamplesList"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="mb-0">Assignments</h1>
+                <div>
+                    <a href="{{ url_for('wagoll_library') }}" class="btn btn-outline-primary me-2">
+                        <i class="fa fa-star me-1"></i> WAGOLL Library
+                    </a>
+                    {% if current_user.classes %}
+                        <a href="{{ url_for('create_assignment', class_id=current_user.classes[0].id) }}" class="btn btn-primary">
+                            <i class="fa fa-plus me-1"></i> New Assignment
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+
+
+            {% if current_user.classes %}
+                {% for class in current_user.classes %}
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="mb-0 d-flex align-items-center">
+                                    {{ class.name }} ({{ class.year_group }})
+                                    <button class="btn btn-link text-primary ms-2 p-0" 
+                                            data-bs-toggle="collapse" 
+                                            data-bs-target="#assignments{{ class.id }}"
+                                            aria-expanded="true">
+                                        <i class="fa fa-chevron-down"></i>
+                                    </button>
+                                </h5>
+                                <div class="btn-group">
+                                    <a href="{{ url_for('export_class_data', class_id=class.id) }}" 
+                                       class="btn btn-outline-primary btn-sm me-2">
+                                        <i class="fa fa-download me-1"></i>Export Data
+                                    </a>
+                                    <a href="{{ url_for('create_assignment', class_id=class.id) }}" 
+                                       class="btn btn-primary btn-sm">
+                                        <i class="fa fa-plus me-1"></i>New Assignment
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="collapse show" id="assignments{{ class.id }}">
+                            <div class="card-body">
+                                {% if class.assignments %}
+                                    <div class="table-responsive">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Title</th>
+                                                    <th>Genre</th>
+                                                    <th>Created</th>
+                                                    <th>Submissions</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for assignment in class.assignments %}
+                                                <tr>
+                                                    <td>{{ assignment.title }}</td>
+                                                    <td>{{ assignment.genre }}</td>
+                                                    <td>{{ assignment.created_at.strftime('%d/%m/%Y') }}</td>
+                                                    <td>{{ assignment.submissions|length }}</td>
+                                                    <td>
+                                                        <div class="btn-group">
+                                                            <a href="{{ url_for('edit_assignment', assignment_id=assignment.id) }}" 
+                                                                class="btn btn-outline-primary btn-sm me-2">
+                                                                <i class="fa fa-edit"></i>
+                                                            </a>
+                                                            <button class="btn btn-gradient btn-sm me-2" 
+                                                                    data-bs-toggle="collapse" 
+                                                                    data-bs-target="#submissions{{ assignment.id }}">
+                                                                <i class="fa fa-eye"></i>
+                                                            </button>
+                                                            {% if assignment.submissions|length > 0 %}
+                                                            <button class="btn btn-outline-primary btn-sm me-2"
+                                                                    onclick="getClassFeedback({{ assignment.id }}, '{{ assignment.title }}')">
+                                                                <i class="fa fa-users me-1"></i> Class Feedback
+                                                            </button>
+                                                            <button class="btn btn-outline-primary btn-sm me-2"
+                                                                    onclick="generateWAGOLL({{ assignment.id }}, '{{ assignment.title }}')">
+                                                                <i class="fa fa-star me-1"></i> WAGOLL
+                                                            </button>
+                                                            {% endif %}
+                                                            <button class="btn btn-outline-danger btn-sm"
+                                                                    onclick="deleteAssignment({{ assignment.id }}, '{{ assignment.title }}')">
+                                                                <i class="fa fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td colspan="5" class="p-0">
+                                                        <div class="collapse" id="submissions{{ assignment.id }}">
+                                                            <div class="p-3">
+                                                                {% if assignment.submissions %}
+                                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                                        <h6 class="mb-0">Submissions:</h6>
+                                                                        <button id="delete-submissions-{{ assignment.id }}" class="btn btn-sm btn-danger" style="display: none;" onclick="deleteSelectedSubmissions({{ assignment.id }})">
+                                                                            <i class="fa fa-trash me-1"></i>Delete Selected
+                                                                        </button>
+                                                                    </div>
+                                                                    <div class="table-responsive">
+                                                                        <table class="table table-sm submissions-table" id="submissions-table-{{ assignment.id }}">
+                                                                            <thead>
+                                                                                <tr>
+                                                                                    <th>
+                                                                                        <div class="form-check">
+                                                                                            <input class="form-check-input select-all-checkbox" type="checkbox" id="select-all-{{ assignment.id }}" 
+                                                                                                   onchange="toggleAllSubmissions(this, {{ assignment.id }})">
+                                                                                        </div>
+                                                                                    </th>
+                                                                                    <th>Student</th>
+                                                                                    <th class="sortable" data-sort="mark" data-table="{{ assignment.id }}">
+                                                                                        Total Mark
+                                                                                        <span class="sort-icon"></span>
+                                                                                    </th>
+                                                                                    <th class="sortable" data-sort="writing-age" data-table="{{ assignment.id }}">
+                                                                                        Writing Age
+                                                                                        <span class="sort-icon"></span>
+                                                                                    </th>
+                                                                                    <th>Submitted</th>
+                                                                                    <th>Actions</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {% for submission in assignment.submissions %}
+                                                                                {% set total_possible_marks = submission.criteria_marks|length * 2 %}
+                                                                                {% set achieved_marks = submission.criteria_marks|sum(attribute='score') %}
+                                                                                {% set percentage = (achieved_marks / total_possible_marks * 100)|round|int if total_possible_marks > 0 else 0 %}
+                                                                                {% set writing_age = submission.writing_age or "0 years 0 months" %}
+                                                                                {% set writing_age_str = writing_age.replace('Estimated writing age:', '').strip().split() %}
+                                                                                {% set writing_age_years = writing_age_str[0]|float if writing_age_str|length > 0 else 0 %}
+                                                                                {% set writing_age_months = writing_age_str[2]|float / 12 if writing_age_str|length > 2 else 0 %}
+                                                                                {% set writing_age_total = writing_age_years + writing_age_months %}
+                                                                                {% set writing_age_total = writing_age_total|round(1) %}
+                                                                                <tr data-mark="{{ percentage }}" data-writing-age="{{ writing_age_total }}">
+                                                                                    <td>
+                                                                                        <div class="form-check">
+                                                                                            <input class="form-check-input submission-checkbox-{{ assignment.id }}" 
+                                                                                                   type="checkbox" value="{{ submission.id }}" 
+                                                                                                   onchange="updateDeleteButtonVisibility({{ assignment.id }})">
+                                                                                        </div>
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        {{ submission.student.name }}
+                                                                                    </td>
+                                                                                    <td>
+                                                                                        <span class="badge {% if percentage >= 80 %}bg-success{% elif percentage >= 60 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                                                            {{ percentage }}%
+                                                                                        </span>
+                                                                                        <small class="text-muted">
+                                                                                            ({{ achieved_marks }}/{{ total_possible_marks }})
+                                                                                        </small>
+                                                                                    </td>
+                                                                                    <td>{{ writing_age_total }} years</td>
+                                                                                    <td>{{ submission.created_at.strftime('%d/%m/%Y') }}</td>
+                                                                                    <td>
+                                                                                        <div class="btn-group">
+                                                                                            <button class="btn btn-outline-secondary btn-sm me-1" disabled>
+                                                                                                <i class="fa fa-folder-open"></i>
+                                                                                            </button>
+                                                                                            <button class="btn btn-outline-danger btn-sm" 
+                                                                                                    onclick="deleteSingleSubmission({{ submission.id }}, '{{ submission.student.name }}')">
+                                                                                                <i class="fa fa-trash"></i>
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                </tr>
+                                                                                {% endfor %}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                {% else %}
+                                                                    <p class="mb-0">No submissions yet.</p>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                {% else %}
+                                    <p class="text-muted mb-0">No assignments created yet.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="fa fa-info-circle me-2"></i>Create a class first to start adding assignments.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function deleteAssignment(assignmentId, title) {
+        if (confirm(`Are you sure you want to delete the assignment "${title}"?`)) {
+            fetch(`/assignment/${assignmentId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete assignment');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the assignment');
+            });
+        }
+    }
+
+    function getClassFeedback(assignmentId, title) {
+        const modal = new bootstrap.Modal(document.getElementById('classFeedbackModal'));
+        modal.show();
+
+        document.getElementById('feedbackLoading').style.display = 'block';
+        document.getElementById('feedbackContent').style.display = 'none';
+
+        fetch(`/assignment/${assignmentId}/class-feedback`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }).then(response => response.json())
+        .then(data => {
+            document.getElementById('feedbackLoading').style.display = 'none';
+            document.getElementById('feedbackContent').style.display = 'block';
+
+            document.getElementById('classStrengths').innerHTML = formatList(data.strengths);
+            document.getElementById('classDevelopment').innerHTML = formatList(data.areas_for_development);
+            document.getElementById('practiceActivities').innerHTML = formatList(data.practice_activities);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while fetching class feedback');
+            modal.hide();
+        });
+    }
+
+    function formatList(items) {
+        return `<ul class="mb-0">
+            ${items.map(item => `<li>${item}</li>`).join('')}
+        </ul>`;
+    }
+
+    let currentAssignmentId = null;
+
+    function generateWAGOLL(assignment_id, title) {
+        currentAssignmentId = assignment_id;
+        const modal = new bootstrap.Modal(document.getElementById('wagollModal'));
+        modal.show();
+
+        // Check if there are saved WAGOLL examples for this assignment
+        fetch(`/assignment/${assignment_id}/wagoll_examples`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }).then(response => response.json())
+        .then(data => {
+            if (data.examples && data.examples.length > 0) {
+                // We have saved examples, show the library
+                document.getElementById('wagollLoading').style.display = 'none';
+                document.getElementById('wagollContent').style.display = 'none';
+                document.getElementById('wagollLibrary').style.display = 'block';
+
+                // Populate the examples list
+                const examplesList = document.getElementById('wagollExamplesList');
+                examplesList.innerHTML = '';
+
+                data.examples.forEach(example => {
+                    const item = document.createElement('a');
+                    item.href = '#';
+                    item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+                    item.dataset.id = example.id;
+                    item.innerHTML = `
+                        <div>
+                            <strong>${example.title}</strong>
+                            <br><small class="text-muted">Last updated: ${new Date(example.updated_at).toLocaleDateString()}</small>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="viewWagollExample(${example.id}, event)">
+                                <i class="fa fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteWagollExample(${example.id}, event)">
+                                <i class="fa fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                    examplesList.appendChild(item);
+                });
+            } else {
+                // No saved examples, generate a new one
+                generateNewWagoll();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // If there's an error, just try to generate a new example
+            generateNewWagoll();
+        });
+    }
+
+    function generateNewWagoll() {
+        // Reset display
+        document.getElementById('wagollLoading').style.display = 'block';
+        document.getElementById('wagollContent').style.display = 'none';
+        document.getElementById('wagollLibrary').style.display = 'none';
+        document.getElementById('wagollAssignmentTitle').textContent = '';
+
+        fetch(`/assignment/${currentAssignmentId}/wagoll`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }).then(response => response.json())
+        .then(data => {
+            document.getElementById('wagollLoading').style.display = 'none';
+            document.getElementById('wagollContent').style.display = 'block';
+
+            document.getElementById('wagollAssignmentTitle').textContent = data.title || '';
+            document.getElementById('wagollText').innerHTML = data.exemplar.replace(/\n/g, '<br>');
+            document.getElementById('wagollExplanation').innerHTML = formatList(data.explanations);
+
+            // Reset the public checkbox
+            document.getElementById('wagollPublic').checked = false;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while generating the WAGOLL example');
+            document.getElementById('wagollLoading').style.display = 'none';
+        });
+    }
+
+    function viewWagollExample(exampleId, event) {
+        if (event) event.preventDefault();
+
+        fetch(`/wagoll_example/${exampleId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }).then(response => response.json())
+        .then(data => {
+            document.getElementById('wagollLibrary').style.display = 'none';
+            document.getElementById('wagollContent').style.display = 'block';
+
+            document.getElementById('wagollAssignmentTitle').textContent = data.assignment_title || '';
+            document.getElementById('wagollText').innerHTML = data.content.replace(/\n/g, '<br>');
+            document.getElementById('wagollExplanation').innerHTML = data.explanations;
+            document.getElementById('wagollPublic').checked = data.is_public;
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while retrieving the WAGOLL example');
+        });
+    }
+
+    function deleteWagollExample(exampleId, event) {
+        if (event) event.preventDefault();
+
+        if (confirm('Are you sure you want to delete this WAGOLL example?')) {
+            fetch(`/wagoll_example/${exampleId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(response => {
+                if (response.ok) {
+                    // Refresh the WAGOLL examples list
+                    generateWAGOLL(currentAssignmentId);
+                } else {
+                    alert('Failed to delete WAGOLL example');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the WAGOLL example');
+            });
+        }
+    }
+
+    function saveWagollExample() {
+        const content = document.getElementById('wagollText').innerHTML;
+        const explanations = document.getElementById('wagollExplanation').innerHTML;
+        const isPublic = document.getElementById('wagollPublic').checked;
+        const title = document.getElementById('wagollAssignmentTitle').textContent;
+
+        fetch('/wagoll_example/save', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                assignment_id: currentAssignmentId,
+                title: title,
+                content: content,
+                explanations: explanations,
+                is_public: isPublic
+            })
+        }).then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('WAGOLL example saved successfully!');
+                // Refresh the WAGOLL examples list
+                generateWAGOLL(currentAssignmentId);
+            } else {
+                alert('Failed to save WAGOLL example: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while saving the WAGOLL example');
+        });
+    }
+
+    function copyWagollToClipboard() {
+        const wagollText = document.getElementById('wagollText').innerText;
+        navigator.clipboard.writeText(wagollText)
+            .then(() => {
+                // Show toast or notification
+                alert('WAGOLL text copied to clipboard!');
+            })
+            .catch(err => {
+                console.error('Error copying text: ', err);
+            });
+    }
+
+    // Functions for managing submission selections and deletion
+    function toggleAllSubmissions(checkbox, assignmentId) {
+        const checkboxes = document.querySelectorAll(`.submission-checkbox-${assignmentId}`);
+        checkboxes.forEach(box => {
+            box.checked = checkbox.checked;
+        });
+        updateDeleteButtonVisibility(assignmentId);
+    }
+
+    function updateDeleteButtonVisibility(assignmentId) {
+        const checkboxes = document.querySelectorAll(`.submission-checkbox-${assignmentId}:checked`);
+        const deleteButton = document.getElementById(`delete-submissions-${assignmentId}`);
+        deleteButton.style.display = checkboxes.length > 0 ? 'block' : 'none';
+    }
+
+    function deleteSelectedSubmissions(assignmentId) {
+        const checkboxes = document.querySelectorAll(`.submission-checkbox-${assignmentId}:checked`);
+        const writingIds = Array.from(checkboxes).map(checkbox => checkbox.value);
+
+        if (writingIds.length === 0) {
+            return;
+        }
+
+        if (confirm(`Are you sure you want to delete ${writingIds.length} selected submissions?`)) {
+            fetch('/writing/bulk_delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ writing_ids: writingIds })
+            }).then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    response.json().then(data => {
+                        alert(`Failed to delete submissions: ${data.error || 'Unknown error'}`);
+                    }).catch(() => {
+                        alert('Failed to delete submissions');
+                    });
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting submissions');
+            });
+        }
+    }
+
+    function deleteSingleSubmission(writingId, studentName) {
+        if (confirm(`Are you sure you want to delete the submission from ${studentName}?`)) {
+            fetch(`/writing/${writingId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            }).then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete submission');
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the submission');
+            });
+        }
+    }
+
+    // Sorting functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        const sortableHeaders = document.querySelectorAll('.sortable');
+        const sortStates = new Map(); // Keep track of sort state for each table
+
+        // Initialize sort states
+        sortableHeaders.forEach(header => {
+            const tableId = header.dataset.table;
+            const sortType = header.dataset.sort;
+            if (!sortStates.has(tableId)) {
+                sortStates.set(tableId, {});
+            }
+            sortStates.get(tableId)[sortType] = {
+                direction: 'desc', // Start with descending sort
+                active: false
+            };
+        });
+
+        function sortTable(tableId, sortType, isAscending) {
+            const tableBody = document.querySelector(`#submissions-table-${tableId} tbody`);
+            const rows = Array.from(tableBody.querySelectorAll('tr'));
+
+            // Sort rows
+            rows.sort((a, b) => {
+                let aVal, bVal;
+
+                if (sortType === 'mark') {
+                    aVal = parseFloat(a.dataset.mark) || 0;
+                    bVal = parseFloat(b.dataset.mark) || 0;
+                } else if (sortType === 'writing-age') {
+                    aVal = parseFloat(a.dataset.writingAge) || 0;
+                    bVal = parseFloat(b.dataset.writingAge) || 0;
+                }
+
+                return isAscending ? aVal - bVal : bVal - aVal;
+            });
+
+            // Clear table
+            while (tableBody.firstChild) {
+                tableBody.removeChild(tableBody.firstChild);
+            }
+
+            // Append sorted rows
+            rows.forEach(row => tableBody.appendChild(row));
+        }
+
+        sortableHeaders.forEach(header => {
+            header.addEventListener('click', function() {
+                const tableId = this.dataset.table;
+                const sortType = this.dataset.sort;
+                const tableState = sortStates.get(tableId);
+
+                // Reset other headers in the same table
+                const tableHeaders = document.querySelectorAll(`#submissions-table-${tableId} .sortable`);
+                tableHeaders.forEach(h => {
+                    if (h !== this) {
+                        h.querySelector('.sort-icon').className = 'sort-icon';
+                        if (h.dataset.sort !== sortType) {
+                            tableState[h.dataset.sort].active = false;
+                        }
+                    }
+                });
+
+                // Toggle sort direction
+                if (!tableState[sortType].active) {
+                    tableState[sortType].direction = 'desc';
+                    tableState[sortType].active = true;
+                } else {
+                    tableState[sortType].direction = tableState[sortType].direction === 'asc' ? 'desc' : 'asc';
+                }
+
+                // Update sort icon
+                this.querySelector('.sort-icon').className = `sort-icon sort-${tableState[sortType].direction}`;
+
+                // Sort the table
+                sortTable(tableId, sortType, tableState[sortType].direction === 'asc');
+            });
+
+            // Initial sort (highest marks first)
+            if (header.dataset.sort === 'mark') {
+                header.click();
+            }
+        });
+    });
+</script>
+{% endblock %}

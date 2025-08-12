@@ -1,0 +1,61 @@
+{# Macros for reusable template components #}
+
+{% macro student_info_card(student) %}
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Student Information</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <ul class="list-unstyled">
+                        <li><strong>Full Name:</strong> {{ student.first_name }} {{ student.last_name }}</li>
+                        <li><strong>Student ID:</strong> {{ student.student_id or 'Not assigned' }}</li>
+                        <li><strong>Date of Birth:</strong> {{ student.date_of_birth.strftime('%d/%m/%Y') }}</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <ul class="list-unstyled">
+                        <li><strong>Class:</strong> {{ student.class_group.name }}</li>
+                        <li><strong>Year Group:</strong> {{ student.class_group.year_group }}</li>
+                        <li><strong>Joined:</strong> {{ student.created_at.strftime('%d/%m/%Y') }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro criteria_display_score(criteria_marks, criteria_id) %}
+    {% set found = false %}
+    {% for mark in criteria_marks %}
+        {% if mark.criteria_id == criteria_id and not found %}
+            {% set found = true %}
+            <span class="badge {% if mark.score == 2 %}bg-success{% elif mark.score == 1 %}bg-warning{% else %}bg-danger{% endif %}">
+                {% if mark.score == 2 %}
+                    <i class="fas fa-check-circle"></i> Met
+                {% elif mark.score == 1 %}
+                    <i class="fas fa-exclamation-circle"></i> Partially Met
+                {% else %}
+                    <i class="fas fa-times-circle"></i> Not Met
+                {% endif %}
+            </span>
+        {% endif %}
+    {% endfor %}
+    
+    {% if not found %}
+        <span class="badge bg-secondary"><i class="fas fa-minus-circle"></i> Not Assessed</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro display_single_score(score) %}
+    <span class="badge {% if score == 2 %}bg-success{% elif score == 1 %}bg-warning{% else %}bg-danger{% endif %}">
+        {% if score == 2 %}
+            <i class="fas fa-check-circle"></i> Met
+        {% elif score == 1 %}
+            <i class="fas fa-exclamation-circle"></i> Partially Met
+        {% else %}
+            <i class="fas fa-times-circle"></i> Not Met
+        {% endif %}
+    </span>
+{% endmacro %}

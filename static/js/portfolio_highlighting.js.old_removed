@@ -1,0 +1,165 @@
+/**
+ * Enhanced text highlighting for student portfolio
+ * This script improves marking mode in the portfolio view
+ */
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize the text highlighting functionality
+    setupTextHighlighting();
+
+    /**
+     * Sets up text highlighting and marking mode in the portfolio view
+     */
+    function setupTextHighlighting() {
+        const toggleButtons = document.querySelectorAll('.toggle-highlight-mode');
+
+        toggleButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Find the containing element and text element
+                const detailsContainer = this.closest('.details-row').querySelector('.p-3');
+                const textElement = detailsContainer.querySelector('[id^="text-"]');
+                
+                // Get the writing sample ID from the text element's ID (format: text-XX)
+                const sampleId = textElement ? textElement.id.replace('text-', '') : null;
+                console.log('Toggle highlight for sample ID:', sampleId);
+
+                // Toggle highlight mode
+                const isActive = this.classList.toggle('active');
+
+                if (isActive) {
+                    this.innerHTML = '<i class="fas fa-times me-1"></i> Exit Marking Mode';
+                    this.classList.remove('btn-outline-primary');
+                    this.classList.add('btn-primary');
+                    
+                    // Check if this button has AI highlights data attribute
+                    if (this.getAttribute('data-apply-ai-highlights') === 'true') {
+                        // Call highlighting function if available
+                        console.log('Applying AI highlights to text element with ID:', textElement.id);
+                        applyHighlightsToText(textElement, sampleId);
+                    } else {
+                        // Setup manual highlighting
+                        setupManualHighlighting(textElement);
+                    }
+                } else {
+                    this.innerHTML = '<i class="fas fa-highlighter me-1"></i> Show Criteria Marking';
+                    this.classList.remove('btn-primary');
+                    this.classList.add('btn-outline-primary');
+                    
+                    // Reset text if needed
+                    if (textElement.getAttribute('data-original-content')) {
+                        textElement.innerHTML = textElement.getAttribute('data-original-content');
+                    }
+                }
+            });
+        });
+    }
+
+    /**
+     * Apply highlights to text based on criteria
+     */
+    function applyHighlightsToText(textElement, sampleId) {
+        // Save original content if not already saved
+        if (!textElement.getAttribute('data-original-content')) {
+            textElement.setAttribute('data-original-content', textElement.innerHTML);
+        }
+        
+        // Reset to original content first
+        const originalContent = textElement.getAttribute('data-original-content');
+        textElement.innerHTML = originalContent;
+        
+        // Get the feedback
+        const feedbackElement = document.getElementById(`feedback-${sampleId}`);
+        if (!feedbackElement) return;
+        
+        const feedback = feedbackElement.textContent;
+        const criteriaPattern = /criterion "([^"]+)".*?examples?:([^"]*?)(?:"|$)/gi;
+        let match;
+        
+        while ((match = criteriaPattern.exec(feedback)) !== null) {
+            const criterionName = match[1].trim();
+            const examplesText = match[2].trim();
+            
+            // Extract examples
+            const examples = examplesText.match(/"([^"]+)"/g) || [];
+            
+            // Apply highlights to each example
+            examples.forEach(example => {
+                const cleanExample = example.replace(/"/g, '').trim();
+                if (cleanExample) {
+                    highlightTextInElement(textElement, cleanExample, criterionName);
+                }
+            });
+        }
+    }
+    
+    /**
+     * Highlight specific text in an element
+     */
+    function highlightTextInElement(element, text, criterionName) {
+        if (!text || !element) return;
+        
+        // Different colors for different criteria types
+        const colors = {
+            'vocabulary': '#c6f6d5',
+            'grammar': '#bee3f8',
+            'structure': '#fed7d7',
+            'punctuation': '#fefcbf',
+            'default': '#ffeb3b'
+        };
+        
+        // Determine highlight color based on criterion category
+        let color = colors.default;
+        const lowerCriterion = criterionName.toLowerCase();
+        
+        if (lowerCriterion.includes('vocabulary') || lowerCriterion.includes('word')) {
+            color = colors.vocabulary;
+        } else if (lowerCriterion.includes('grammar') || lowerCriterion.includes('tense')) {
+            color = colors.grammar;
+        } else if (lowerCriterion.includes('structure') || lowerCriterion.includes('paragraph')) {
+            color = colors.structure;
+        } else if (lowerCriterion.includes('punctuation') || lowerCriterion.includes('comma')) {
+            color = colors.punctuation;
+        }
+        
+        // Create a regex to find the text
+        const escapedText = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(escapedText, 'g');
+        
+        // Replace text with highlighted version
+        element.innerHTML = element.innerHTML.replace(regex, 
+            `<span class="highlight" style="background-color: ${color};" title="${criterionName}">$&</span>`);
+    }
+    
+    /**
+     * Setup for manual highlighting
+     */
+    function setupManualHighlighting(textElement) {
+        // Set up manual highlighting if needed
+        textElement.style.userSelect = 'text';
+        
+        // Add event listener for manual highlighting
+        textElement.addEventListener('mouseup', function(event) {
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0 && !selection.isCollapsed) {
+                const range = selection.getRangeAt(0);
+                
+                // Only process if we have text selected
+                if (range.toString().trim() !== '') {
+                    // Create highlight span
+                    const highlightSpan = document.createElement('span');
+                    highlightSpan.className = 'highlight';
+                    highlightSpan.style.backgroundColor = '#ffeb3b';
+                    
+                    // Apply the highlight
+                    try {
+                        range.surroundContents(highlightSpan);
+                    } catch (e) {
+                        console.error('Highlighting error:', e);
+                    }
+                    
+                    // Clear the selection
+                    selection.removeAllRanges();
+                }
+            }
+        });
+    }
+});

@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}Create Assignment - {{ class_obj.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .bg-success.bg-opacity-25 {
+        background-color: rgba(var(--bs-success-rgb), 0.25) !important;
+    }
+    .bg-warning.bg-opacity-25 {
+        background-color: rgba(var(--bs-warning-rgb), 0.25) !important;
+    }
+    .bg-danger.bg-opacity-25 {
+        background-color: rgba(var(--bs-danger-rgb), 0.25) !important;
+    }
+
+    /* Form input styling */
+    .form-control {
+        color: #0d6efd !important;
+        font-weight: 500;
+    }
+    .form-control:focus {
+        color: #0d6efd !important;
+        background-color: rgba(13, 110, 253, 0.1) !important;
+    }
+    .form-control::placeholder {
+        color: rgba(13, 110, 253, 0.6) !important;
+    }
+    .form-control:disabled {
+        color: rgba(13, 110, 253, 0.7) !important;
+        background-color: rgba(13, 110, 253, 0.05) !important;
+    }
+
+    /* Add hover effect to see criterion description */
+    [title] {
+        cursor: help;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="text-center mb-5">
+                <h1 class="display-4 mb-3">Create Assignment</h1>
+                <p class="lead">{{ class_obj.name }} ({{ class_obj.year_group }})</p>
+            </div>
+
+            {% with messages = request.session.pop("flash", None) %}
+                {% if messages %}
+                        <div id='toast' class="alert alert-{{ messages.category }}">{{ messages.message }}
+                            {% if category == 'success' %}
+                                <i class="fa fa-check-circle"></i>
+                            {% elif category == 'warning' %}
+                                <i class="fa fa-exclamation-triangle"></i>
+                            {% elif category == 'error' %}
+                                <i class="fa fa-times-circle"></i>
+                            {% endif %}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="POST" id="assignment-form" >
+
+                        <div class="mb-3">
+                            <label class="form-label" for="title">Assignment Title</label>
+                            <input type="text" name="title" class="form-control" maxlength="200" required>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="curriculum">Curriculum</label>
+                                <select name="curriculum" class="form-control" required>
+                                    <option value="english">English National Curriculum</option>
+                                    <option value="american">American Common Core</option>
+                                    <option value="ib">International Baccalaureate (IB)</option>
+                                    <option value="australian">Australian Curriculum</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="genre">Genre</label>
+                                <select name="genre" class="form-control" id="genre-select" required>
+                                    <option value="narrative">Narrative Writing</option>
+                                    <option value="descriptive">Descriptive Writing</option>
+                                    <option value="persuasive">Persuasive Writing</option>
+                                    <option value="expository">Expository Writing</option>
+                                    <option value="poetry">Poetry</option>
+                                    <option value="report">Report Writing</option>
+                                    <option value="letter">Letter Writing</option>
+                                    <option value="journal">Journal Entry</option>
+                                    <option value="custom">Custom Genre...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-3 d-none" id="custom-genre-field">
+                            <label class="form-label" for="custom_genre">Custom Genre Name</label>
+                            <input type="text" name="custom_genre" class="form-control" maxlength="100">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Success Criteria</label>
+                            <div class="alert" style="background-color: white; border: 1px solid rgba(62, 93, 88, 0.2); color: #3E5D58;">
+                                <small>
+                                    <i class="fa fa-info-circle me-2"></i>
+                                    Each criterion will be marked as:
+                                    <ul class="mb-0" style="color: #3E5D58;">
+                                        <li>0 = Not met</li>
+                                        <li>1 = Partially met</li>
+                                        <li>2 = Confidently used</li>
+                                    </ul>
+                                    <div class="mt-2" id="total-marks-info" style="color: #3E5D58;">
+                                        Total possible marks: <strong>2</strong> (1 criterion × 2 points)
+                                    </div>
+                                </small>
+                            </div>
+
+                            <!-- Tabs for input methods -->
+                            <ul class="nav nav-tabs mb-3" id="criteriaInputTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="individual-tab" data-bs-toggle="tab" 
+                                            data-bs-target="#individual" type="button" role="tab">
+                                        Individual Input
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="bulk-tab" data-bs-toggle="tab" 
+                                            data-bs-target="#bulk" type="button" role="tab">
+                                        Bulk Input
+                                    </button>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content" id="criteriaInputContent">
+                                <div class="tab-pane fade show active" id="individual" role="tabpanel">
+                                    <div id="criteria-list">
+                                        <div class="input-group mb-2">
+                                            <input type="text" class="form-control" name="criteria_description"
+                                                placeholder="Enter success criterion" required>
+                                            <button type="button" class="btn btn-outline-danger remove-criteria">
+                                                <i class="fa fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-info" id="add-criteria">
+                                        <i class="fa fa-plus me-2"></i>Add Criterion
+                                    </button>
+                                </div>
+
+                                <div class="tab-pane fade" id="bulk" role="tabpanel">
+                                    <div class="form-text mb-2">
+                                        Enter one criterion per line. Empty lines will be ignored.
+                                    </div>
+                                    <textarea class="form-control" id="bulk-criteria" rows="5"
+                                            placeholder="Enter criteria (one per line)"></textarea>
+                                    <button type="button" class="btn btn-outline-info mt-2" id="apply-bulk-criteria">
+                                        <i class="fa fa-check me-2"></i>Apply Criteria
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa fa-save me-2"></i>Create Assignment
+                            </button>
+                            <a href="/assignments" class="btn btn-outline-secondary">
+                                <i class="fa fa-times me-2"></i>Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const criteriaList = document.getElementById('criteria-list');
+        const addButton = document.getElementById('add-criteria');
+        const totalMarksInfo = document.getElementById('total-marks-info');
+        const bulkTextarea = document.getElementById('bulk-criteria');
+        const applyBulkButton = document.getElementById('apply-bulk-criteria');
+        // CSV-related variables removed
+        const genreSelect = document.querySelector('select[name="genre"]'); 
+        const customGenreField = document.getElementById('custom-genre-field');
+
+        // Show/hide custom genre field based on selection
+        genreSelect.addEventListener('change', function() {
+            if (this.value === 'custom') {
+                customGenreField.classList.remove('d-none');
+                customGenreField.querySelector('input').required = true;
+            } else {
+                customGenreField.classList.add('d-none');
+                customGenreField.querySelector('input').required = false;
+            }
+        });
+
+        function updateTotalMarks() {
+            const criteriaCount = document.getElementsByName('criteria_description').length;
+            const totalMarks = criteriaCount * 2;
+            totalMarksInfo.innerHTML = `Total possible marks: <strong>${totalMarks}</strong> (${criteriaCount} ${criteriaCount === 1 ? 'criterion' : 'criteria'} × 2 points)`;
+        }
+
+        function createCriterionInput(value = '') {
+            const div = document.createElement('div');
+            div.className = 'input-group mb-2';
+            div.innerHTML = `
+                <input type="text" class="form-control" name="criteria_description" 
+                       value="${value}" placeholder="Enter success criterion" required>
+                <button type="button" class="btn btn-outline-danger remove-criteria">
+                    <i class="fa fa-trash"></i>
+                </button>
+            `;
+            return div;
+        }
+
+        addButton.addEventListener('click', function() {
+            criteriaList.appendChild(createCriterionInput());
+            updateTotalMarks();
+        });
+
+        criteriaList.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-criteria')) {
+                const criteriaItem = e.target.closest('.input-group');
+                if (document.getElementsByName('criteria_description').length > 1) {
+                    criteriaItem.remove();
+                    updateTotalMarks();
+                }
+            }
+        });
+
+        // Bulk text input handling
+        applyBulkButton.addEventListener('click', function() {
+            const criteria = bulkTextarea.value.split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+
+            if (criteria.length > 0) {
+                criteriaList.innerHTML = '';
+                criteria.forEach(criterion => {
+                    criteriaList.appendChild(createCriterionInput(criterion));
+                });
+                updateTotalMarks();
+                document.getElementById('individual-tab').click();
+            }
+        });
+
+        // CSV handling code removed
+
+        // Initialize total marks display
+        updateTotalMarks();
+    });
+</script>
+<script>
+    // Toggle custom genre input
+    document.getElementById('genre-select')?.addEventListener('change', function () {
+        const isCustom = this.value === 'custom';
+        document.getElementById('custom-genre-field')?.classList.toggle('d-none', !isCustom);
+        });
+</script>
+<script>
+  var element = document.getElementById('toast');
+  element.style.display = "block";
+  setTimeout(function() {
+    element.style.display = "none";
+  }, 3000); // 1000ms = 1 second
+</script>
+{% endblock %}

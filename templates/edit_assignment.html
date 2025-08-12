@@ -1,0 +1,264 @@
+{% extends "base.html" %} {% block title %}Edit Assignment - {{ assignment.title }}{% endblock %} {% block extra_head %}
+<style>
+  .bg-success.bg-opacity-25 {
+    background-color: rgba(var(--bs-success-rgb), 0.25) !important;
+  }
+  .bg-warning.bg-opacity-25 {
+    background-color: rgba(var(--bs-warning-rgb), 0.25) !important;
+  }
+  .bg-danger.bg-opacity-25 {
+    background-color: rgba(var(--bs-danger-rgb), 0.25) !important;
+  }
+
+  .form-control {
+    color: #198754 !important;
+    font-weight: 500;
+  }
+  .form-control:focus {
+    color: #198754 !important;
+    background-color: rgba(25, 135, 84, 0.1) !important;
+  }
+  .form-control::placeholder {
+    color: rgba(25, 135, 84, 0.6) !important;
+  }
+  .form-control:disabled {
+    color: rgba(25, 135, 84, 0.7) !important;
+    background-color: rgba(25, 135, 84, 0.05) !important;
+  }
+
+  [title] {
+    cursor: help;
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="text-center mb-5">
+        <h1 class="display-4 mb-3">Edit Assignment</h1>
+        <p class="lead">Update assignment details and success criteria</p>
+      </div>
+      {% with flash = request.session.pop("flash", None) %}
+          {% if flash %}
+              <div id='toast' class="alert alert-{{ flash.category }}">{{ flash.message }}</div>
+          {% endif %}
+      {% endwith %}
+
+      {% if messages %} {% for category, message in messages %}
+      <div
+        class="alert alert-{{ category }} alert-dismissible fade show"
+        role="alert"
+      >
+        {{ message }}
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="alert"
+        ></button>
+      </div>
+      {% endfor %} {% endif %}
+
+      <div class="card">
+        <div class="card-body">
+          <form method="POST" id="assignment-form">
+            {{ form.csrf_token if form.csrf_token }}
+
+            <div class="mb-3">
+              <label for="title" class="form-label">Title</label>
+              <input
+                type="text"
+                id="title"
+                name="title"
+                class="form-control"
+                value="{{ form.title }}"
+                required
+              />
+              {% if form_errors and form_errors.title %}
+                {% for error in form_errors.title %}
+                  <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+
+            <div class="mb-3">
+              <label for="description" class="form-label">Description</label>
+              <textarea
+                id="description"
+                name="description"
+                class="form-control"
+                rows="4"
+                required
+              >{{ form.description }}</textarea>
+              {% if form_errors and form_errors.description %}
+                {% for error in form_errors.description %}
+                  <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+
+            <!-- Success Criteria Section -->
+            <div class="mb-3">
+              <label class="form-label">Success Criteria</label>
+              <div class="alert" style="background-color: white; border: 1px solid rgba(62, 93, 88, 0.2); color: #3e5d58;">
+                <small>
+                  <i class="fa fa-info-circle me-2"></i>Each criterion will be marked as:
+                  <ul class="mb-0" style="color: #3e5d58">
+                    <li>0 = Not met</li>
+                    <li>1 = Partially met</li>
+                    <li>2 = Confidently used</li>
+                  </ul>
+                  <div class="mt-2" id="total-marks-info" style="color: #3e5d58">
+                    Total possible marks: <strong>{{ assignment.criteria|length * 2 }}</strong>
+                    ({{ assignment.criteria|length }} {{ 'criterion' if assignment.criteria|length == 1 else 'criteria' }} × 2 points)
+                  </div>
+                </small>
+              </div>
+
+              <!-- Tabs for Individual / Bulk -->
+              <ul class="nav nav-tabs mb-3" id="criteriaInputTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" id="individual-tab" data-bs-toggle="tab" data-bs-target="#individual" type="button" role="tab">
+                    Individual Input
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="bulk-tab" data-bs-toggle="tab" data-bs-target="#bulk" type="button" role="tab">
+                    Bulk Input
+                  </button>
+                </li>
+              </ul>
+
+              <div class="tab-content" id="criteriaInputContent">
+                <!-- Individual -->
+                <div class="tab-pane fade show active" id="individual" role="tabpanel">
+                  <div id="criteria-list">
+                    {% for criterion in assignment.criteria %}
+                    <div class="input-group mb-2">
+                      <input
+                        type="text"
+                        class="form-control"
+                        name="criteria-description[]"
+                        value="{{ criterion.description }}"
+                        placeholder="Enter success criterion"
+                        required
+                      />
+                      <button type="button" class="btn btn-outline-danger remove-criteria">
+                        <i class="fa fa-trash"></i>
+                      </button>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  <button type="button" class="btn btn-outline-info" id="add-criteria">
+                    <i class="fa fa-plus me-2"></i>Add Criterion
+                  </button>
+                </div>
+
+                <!-- Bulk -->
+                <div class="tab-pane fade" id="bulk" role="tabpanel">
+                  <div class="form-text mb-2">
+                    Enter one criterion per line. Empty lines will be ignored.
+                  </div>
+                  <textarea
+                    class="form-control"
+                    id="bulk-criteria"
+                    rows="5"
+                    placeholder="Enter criteria (one per line)"
+                  ></textarea>
+                  <button type="button" class="btn btn-outline-info mt-2" id="apply-bulk-criteria">
+                    <i class="fa fa-check me-2"></i>Apply Criteria
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-grid gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="fa fa-save me-2"></i>Update Assignment
+              </button>
+              <a href="{{ url_for('assignments') }}" class="btn btn-outline-secondary">
+                <i class="fa fa-times me-2"></i>Cancel
+              </a>
+            </div>
+          </form>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block extra_scripts %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const criteriaList = document.getElementById("criteria-list");
+    const addButton = document.getElementById("add-criteria");
+    const totalMarksInfo = document.getElementById("total-marks-info");
+    const bulkTextarea = document.getElementById("bulk-criteria");
+    const applyBulkButton = document.getElementById("apply-bulk-criteria");
+
+    function updateTotalMarks() {
+      const criteriaCount = document.getElementsByName(
+        "criteria-description[]"
+      ).length;
+      const totalMarks = criteriaCount * 2;
+      totalMarksInfo.innerHTML = `Total possible marks: <strong>${totalMarks}</strong> (${criteriaCount} ${
+        criteriaCount === 1 ? "criterion" : "criteria"
+      } × 2 points)`;
+    }
+
+    function createCriterionInput(value = "") {
+      const div = document.createElement("div");
+      div.className = "input-group mb-2";
+      div.innerHTML = `
+                <input type="text" class="form-control" name="criteria-description[]" 
+                       value="${value}" placeholder="Enter success criterion" required>
+                <button type="button" class="btn btn-outline-danger remove-criteria">
+                    <i class="fa fa-trash"></i>
+                </button>
+            `;
+      return div;
+    }
+
+    addButton.addEventListener("click", function () {
+      criteriaList.appendChild(createCriterionInput());
+      updateTotalMarks();
+    });
+
+    criteriaList.addEventListener("click", function (e) {
+      if (e.target.closest(".remove-criteria")) {
+        const criteriaItem = e.target.closest(".input-group");
+        if (document.getElementsByName("criteria-description[]").length > 1) {
+          criteriaItem.remove();
+          updateTotalMarks();
+        }
+      }
+    });
+
+    // Bulk text input handling
+    applyBulkButton.addEventListener("click", function () {
+      const criteria = bulkTextarea.value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      if (criteria.length > 0) {
+        criteriaList.innerHTML = "";
+        criteria.forEach((criterion) => {
+          criteriaList.appendChild(createCriterionInput(criterion));
+        });
+        updateTotalMarks();
+        document.getElementById("individual-tab").click();
+      }
+    });
+
+    // Initialize total marks display
+    updateTotalMarks();
+  });
+</script>
+<script>
+  var element = document.getElementById('toast');
+  element.style.display = "block";
+  setTimeout(function() {
+    element.style.display = "none";
+  }, 3000); // 1000ms = 1 second
+</script>
+{% endblock %}

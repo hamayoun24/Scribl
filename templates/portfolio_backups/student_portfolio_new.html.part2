@@ -1,0 +1,189 @@
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Chart toggle functionality
+    const genreChartBtn = document.getElementById('genreChartBtn');
+    const ageChartBtn = document.getElementById('ageChartBtn');
+    const genreChart = document.getElementById('genreChart');
+    const ageChart = document.getElementById('ageChart');
+    
+    genreChartBtn.addEventListener('click', function() {
+        genreChart.style.display = 'block';
+        ageChart.style.display = 'none';
+        genreChartBtn.classList.add('active');
+        ageChartBtn.classList.remove('active');
+    });
+    
+    ageChartBtn.addEventListener('click', function() {
+        genreChart.style.display = 'none';
+        ageChart.style.display = 'block';
+        genreChartBtn.classList.remove('active');
+        ageChartBtn.classList.add('active');
+    });
+    
+    // Bulk delete checkbox functionality
+    const selectAllCheckbox = document.getElementById('selectAllSamples');
+    const sampleCheckboxes = document.querySelectorAll('.sample-checkbox');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            const isChecked = this.checked;
+            sampleCheckboxes.forEach(checkbox => {
+                checkbox.checked = isChecked;
+            });
+            updateDeleteButtonState();
+        });
+    }
+    
+    sampleCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateDeleteButtonState);
+    });
+    
+    function updateDeleteButtonState() {
+        const anyChecked = Array.from(sampleCheckboxes).some(checkbox => checkbox.checked);
+        bulkDeleteBtn.disabled = !anyChecked;
+    }
+    
+    // Generate the genre chart
+    const genreCtx = document.getElementById('genreChart').getContext('2d');
+    new Chart(genreCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ genre_labels|tojson }},
+            datasets: [{
+                label: 'Average % Criteria Met',
+                data: {{ genre_scores|tojson }},
+                backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Criteria Met (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Genre'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Performance by Genre',
+                    font: {
+                        size: 16
+                    }
+                },
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+    
+    // Generate the age comparison chart
+    const ageCtx = document.getElementById('ageChart').getContext('2d');
+    new Chart(ageCtx, {
+        type: 'line',
+        data: {
+            labels: {{ age_dates|tojson }},
+            datasets: [{
+                label: 'Writing Age',
+                data: {{ age_values|tojson }},
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Writing Age'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Writing Age Progression',
+                    font: {
+                        size: 16
+                    }
+                }
+            }
+        }
+    });
+    
+    // This function is now handled by portfolio_collapsible.js
+    function populateAnalysisData(sampleId) {
+        // Functionality moved to portfolio_collapsible.js
+        // This empty function remains to prevent any existing calls to it from breaking
+    }
+});
+
+// Function to handle writing sample deletion
+function deleteWritingSample(id, filename) {
+    if (confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
+        fetch(`/writing/${id}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('Error deleting the writing sample.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while trying to delete the writing sample.');
+        });
+    }
+}
+
+// Function to print writing report
+function printWritingReport(id) {
+    window.open(`/writing/${id}/print`, '_blank');
+}
+</script>
+
+<!-- External scripts -->
+<script src="{{ url_for('static', filename='js/portfolio_collapsible.js') }}"></script>
+<script src="{{ url_for('static', filename='js/portfolio_highlighting.js') }}"></script>
+{% endblock %}

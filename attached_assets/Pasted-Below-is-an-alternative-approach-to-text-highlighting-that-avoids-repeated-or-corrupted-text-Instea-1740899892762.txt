@@ -1,0 +1,218 @@
+Below is an alternative approach to text highlighting that avoids repeated or corrupted text. Instead of doing multiple string replacements (which can interfere with each other), we’ll:
+
+Collect all matches (start and end indices) for each example in the extracted text.
+Sort and merge any overlapping or nested matches.
+Rebuild the highlighted string in one pass.
+This method is more robust than multiple .replace() calls, especially when examples overlap or partially match one another. It should fix the issue of repeated text you’re seeing in your screenshots.
+
+Step-by-Step Implementation
+1. Parse All Examples From Criteria
+We’ll scan each mark.justification for text in single quotes ('...') to find the example strings. For each example, we’ll store the example text and the associated score (1 or 2).
+
+2. Find All Occurrences in the Extracted Text
+For each example, we’ll find all start indices where it appears in the extracted text. We’ll store each match as an object with:
+
+js
+Copy
+Edit
+{
+  start: <number>,
+  end: <number>,
+  score: <1 or 2>
+}
+We’ll do a case-insensitive search to match your existing approach (or case-sensitive if you prefer).
+
+3. Sort and Merge Overlapping Matches
+Once we have a list of all matches (possibly hundreds if the text is long), we:
+
+Sort them by start ascending.
+Merge any overlapping or nested ranges so they don’t create nested <span> tags or repeated text.
+For example, if you have a match from 10 to 20 and another from 15 to 25, you merge them into one range from 10 to 25. Decide which score to use if they differ (e.g., pick the higher or partially highlight each portion).
+4. Build the Highlighted String
+Finally, we build the output by:
+
+Taking substrings of the text that are not highlighted and appending them as plain text.
+Wrapping the highlighted ranges in <span class="highlight-partial"> or <span class="highlight-full"> as appropriate.
+Sample Code
+Below is a complete JavaScript helper function illustrating this approach. Feel free to rename variables or adapt it to your app’s structure.
+
+js
+Copy
+Edit
+/**
+ * highlightText - highlights portions of `text` based on the examples found in `criteriaMarks`.
+ * 
+ * @param {string} text - The extracted text to be highlighted.
+ * @param {Array} criteriaMarks - Array of objects with { justification, score }, where:
+ *   - justification contains examples in single quotes (e.g., "Examples include 'foo' and 'bar'").
+ *   - score is 1 (partial) or 2 (full).
+ * @returns {string} The highlighted HTML string.
+ */
+function highlightText(text, criteriaMarks) {
+  if (!text || !criteriaMarks || !Array.isArray(criteriaMarks)) return text;
+
+  // 1. Extract all examples from criteriaMarks
+  const examples = [];
+  criteriaMarks.forEach(mark => {
+    if (!mark.justification) return;
+    const matches = mark.justification.match(/'([^']+)'/g) || [];
+    matches.forEach(m => {
+      const example = m.slice(1, -1).trim(); // remove quotes and trim
+      if (example) {
+        examples.push({
+          example,
+          score: mark.score
+        });
+      }
+    });
+  });
+
+  // If no examples, just return the original text
+  if (examples.length === 0) return text;
+
+  // 2. Find all occurrences of each example in the text
+  // We'll store them in an array of { start, end, score }
+  const matches = [];
+  const lowerText = text.toLowerCase(); // for case-insensitive matching
+
+  examples.forEach(({ example, score }) => {
+    const lowerExample = example.toLowerCase();
+    let startIndex = 0;
+    while (true) {
+      const foundIndex = lowerText.indexOf(lowerExample, startIndex);
+      if (foundIndex === -1) break;
+      matches.push({
+        start: foundIndex,
+        end: foundIndex + example.length,
+        score
+      });
+      startIndex = foundIndex + example.length;
+    }
+  });
+
+  // If no matches, return the original text
+  if (matches.length === 0) return text;
+
+  // 3. Sort matches by start index ascending
+  matches.sort((a, b) => a.start - b.start);
+
+  // 4. Merge overlapping matches
+  const merged = [];
+  let current = matches[0];
+
+  for (let i = 1; i < matches.length; i++) {
+    const next = matches[i];
+    if (next.start <= current.end) {
+      // There's overlap or adjacency
+      current.end = Math.max(current.end, next.end);
+      // Decide which score to keep if needed
+      // For simplicity, let's keep the "higher" highlight
+      if (next.score > current.score) {
+        current.score = next.score;
+      }
+    } else {
+      // No overlap, push current and move on
+      merged.push(current);
+      current = next;
+    }
+  }
+  // push the last one
+  merged.push(current);
+
+  // 5. Build the highlighted string
+  let result = '';
+  let lastIndex = 0;
+  
+  merged.forEach(range => {
+    // Add text from the last position to the start of this highlight
+    result += escapeHtml(text.substring(lastIndex, range.start));
+    
+    // Wrap the highlight
+    const highlightText = escapeHtml(text.substring(range.start, range.end));
+    const cssClass = (range.score === 2) ? 'highlight-full' : 'highlight-partial';
+    result += `<span class="${cssClass}">${highlightText}</span>`;
+    
+    lastIndex = range.end;
+  });
+
+  // Add any remaining text after the last match
+  if (lastIndex < text.length) {
+    result += escapeHtml(text.substring(lastIndex));
+  }
+
+  return result;
+}
+
+/**
+ * escapeHtml - utility to escape special HTML characters
+ * so they don't break our spans.
+ */
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+Why This Helps
+No Overlapping Replacements
+By collecting all match ranges first, then merging them, we avoid nested or partial overlaps that can lead to repeated or mangled text.
+
+Case-Insensitive Search
+Converting both the text and the example to lowercase ensures we match examples regardless of case. You can easily switch to case-sensitive if needed.
+
+Single Rebuild Pass
+We only rebuild the final string once, which reduces the risk of conflicting replacements.
+
+Merging Overlaps
+If two examples overlap, we unify them into a single highlighted range. In the example code, we keep the higher (score 2) highlight if the ranges overlap.
+
+HTML Escaping
+We escape any special characters from the original text so that user-submitted content doesn’t break our markup.
+
+Usage Example
+After your AI returns criteria_marks and you have the extracted text in a variable like extractedText, simply do:
+
+js
+Copy
+Edit
+const highlightedHtml = highlightText(extractedText, criteria_marks);
+// Then insert `highlightedHtml` into your page, e.g.:
+document.getElementById('analysisResults').innerHTML = highlightedHtml;
+Make sure you have your CSS classes defined:
+
+css
+Copy
+Edit
+.highlight-partial {
+  background-color: #ffd700 !important; /* Yellow for partial matches */
+  padding: 2px 4px;
+  display: inline;
+}
+.highlight-full {
+  background-color: #90EE90 !important; /* Green for full matches */
+  padding: 2px 4px;
+  display: inline;
+}
+Troubleshooting Tips
+Exact String Match: This approach requires that the text in single quotes exactly appears in the extracted text (minus case differences). If the AI or teacher’s justification has extra spaces, punctuation, or partial words, it may not match.
+Large Substring Overlaps: If you have very long substrings that almost entirely overlap, the merging logic will unify them. Adjust the “which score to keep” logic if needed.
+Performance: For very large texts or numerous examples, collecting all occurrences can be somewhat intensive. Typically, though, it’s fine for typical classroom writing lengths.
+This approach should produce a clean, consistently highlighted result without duplicating or breaking your text, as seen in your previous screenshots.
+
+
+
+
+
+
+
+
+
+
+
+Search
+
+Reason
+
+ChatGPT can make mistakes. Check important info.

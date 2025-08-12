@@ -1,0 +1,20 @@
+
+# Environment variables files
+.env
+# Virtual environment directories
+env/
+
+# Ignore pycache files
+__pycache__/
+
+# Ignore Vs code workspace files
+.vscode
+# Ignore Python cache files
+*.pyc
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*.ipynb
+# Ignore Jupyter Notebook configuration files
+
+#Poetry files
+poetry.lock

@@ -1,0 +1,788 @@
+{% extends "base.html" %}
+{% from "macros.html" import criteria_display_score %}
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/chart-styles.css') }}">
+<style>
+    /* Custom styles for portfolio page */
+    .portfolio-header {
+        background-color: #f0f8ff;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        border-left: 5px solid #007bff;
+    }
+    
+    .stat-card {
+        background-color: #fff;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        height: 100%;
+        transition: transform 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #007bff;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    .writing-card {
+        background-color: #fff;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        border-left: 5px solid #28a745;
+    }
+    
+    .chart-container {
+        position: relative;
+        margin: auto;
+        height: 300px;
+        width: 100%;
+    }
+    
+    .toggle-chart-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+    }
+    
+    .criteria-pill {
+        display: inline-block;
+        padding: 5px 10px;
+        margin: 3px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+    }
+    
+    .criteria-met {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .criteria-partial {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .criteria-not-met {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .student-nav {
+        margin: 20px 0;
+    }
+    
+    /* Text highlighting styles */
+    .highlight-vocabulary {
+        background-color: #c6f6d5;
+    }
+    
+    .highlight-grammar {
+        background-color: #bee3f8;
+    }
+    
+    .highlight-structure {
+        background-color: #fed7d7;
+    }
+    
+    .highlight-punctuation {
+        background-color: #fefcbf;
+    }
+    
+    .text-content {
+        white-space: pre-wrap;
+        line-height: 1.8;
+        padding: 15px;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        background-color: #f8f9fa;
+        font-family: 'Roboto', sans-serif;
+    }
+    
+    .criteria-legend {
+        display: flex;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 5px;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-right: 15px;
+        margin-bottom: 5px;
+    }
+    
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        margin-right: 5px;
+        border-radius: 3px;
+    }
+    
+    .criteria-score-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 10px;
+    }
+    
+    .loading-animation {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 300px;
+    }
+    
+    .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+    
+    .btn-fab {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        z-index: 1000;
+    }
+    
+    .portfolio-stats {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .stats-heading {
+        font-size: 1.2rem;
+        color: #495057;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 5px;
+    }
+    
+    .chart-toggle-container {
+        position: relative;
+        text-align: right;
+        margin-bottom: 10px;
+    }
+    
+    .toggle-details {
+        cursor: pointer;
+    }
+    
+    .details-row {
+        background-color: #f8f9fa;
+    }
+    
+    .marking-instructions {
+        background-color: #e9ecef;
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 10px;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h1 class="mb-0">{{ student.first_name }}'s Portfolio</h1>
+                <div class="student-nav">
+                    <div class="btn-group" role="group">
+                        {% if prev_student %}
+                        <a href="{{ url_for('student_portfolio', student_id=prev_student.id) }}" class="btn btn-outline-primary">
+                            <i class="fas fa-chevron-left"></i> Previous: {{ prev_student.first_name }}
+                        </a>
+                        {% endif %}
+                        
+                        {% if next_student %}
+                        <a href="{{ url_for('student_portfolio', student_id=next_student.id) }}" class="btn btn-outline-primary">
+                            Next: {{ next_student.first_name }} <i class="fas fa-chevron-right"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="portfolio-header">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h4 class="mb-2">{{ student.first_name }} {{ student.last_name }}</h4>
+                        <p class="mb-1">
+                            <i class="fas fa-graduation-cap me-2"></i> Class: {{ student.class_group.name }}
+                        </p>
+                        <p class="mb-1">
+                            <i class="fas fa-calendar-alt me-2"></i> Date of Birth: {{ student.date_of_birth.strftime('%d %b %Y') }}
+                        </p>
+                        {% if student.student_id %}
+                        <p class="mb-1">
+                            <i class="fas fa-id-card me-2"></i> Student ID: {{ student.student_id }}
+                        </p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <div class="btn-group">
+                            <a href="{{ url_for('export_student_portfolio', student_id=student.id) }}" class="btn btn-outline-success">
+                                <i class="fas fa-file-excel me-1"></i> Export Portfolio
+                            </a>
+                            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteStudentModal">
+                                <i class="fas fa-trash-alt me-1"></i> Delete Student
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="portfolio-stats">
+                <h5 class="stats-heading">Portfolio Overview</h5>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="row">
+                                <div class="col-8">
+                                    <div class="stat-number">{{ writing_samples|length }}</div>
+                                    <div class="stat-label">Writing Samples</div>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <i class="fas fa-file-alt fa-2x text-primary"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="row">
+                                <div class="col-8">
+                                    <div class="stat-number">{{ assignments|length }}</div>
+                                    <div class="stat-label">Assignments</div>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <i class="fas fa-tasks fa-2x text-success"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="row">
+                                <div class="col-8">
+                                    <div class="stat-number">
+                                        {% if average_criteria_met is not none %}
+                                        {{ '%.1f'|format(average_criteria_met) }}%
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </div>
+                                    <div class="stat-label">Avg. Criteria Met</div>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <i class="fas fa-check-circle fa-2x text-info"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="row">
+                                <div class="col-8">
+                                    <div class="stat-number">
+                                        {% if progress_rating %}
+                                        {{ progress_rating }}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </div>
+                                    <div class="stat-label">Progress Rating</div>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <i class="fas fa-chart-line fa-2x text-warning"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Performance Analytics</h5>
+                        <div class="chart-toggle-container">
+                            <div class="btn-group">
+                                <button id="genreChartBtn" class="btn btn-light btn-sm active">Marks by Genre</button>
+                                <button id="ageChartBtn" class="btn btn-light btn-sm">Age Comparison</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-lg-12">
+                            <div id="chartContainer" class="chart-container">
+                                <canvas id="genreChart" style="display: block;"></canvas>
+                                <canvas id="ageChart" style="display: none;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Writing Samples</h5>
+                        <div>
+                            <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#bulkDeleteModal">
+                                <i class="fas fa-trash-alt me-1"></i> Bulk Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 5%">#</th>
+                                    <th style="width: 15%">Date</th>
+                                    <th style="width: 20%">Filename</th>
+                                    <th style="width: 20%">Assignment</th>
+                                    <th style="width: 15%">Writing Age</th>
+                                    <th style="width: 15%">Marks (%)</th>
+                                    <th style="width: 10%">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sample in writing_samples %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ sample.created_at.strftime('%d %b %Y') }}</td>
+                                    <td>
+                                        <form id="filename-form-{{ sample.id }}" class="d-flex align-items-center" method="POST" action="{{ url_for('update_writing_filename', writing_id=sample.id) }}">
+                                            <input type="text" name="filename" class="form-control form-control-sm" value="{{ sample.filename }}" onblur="this.form.submit()" style="width: 85%;">
+                                            <i class="fas fa-edit ms-2 text-muted" style="font-size: 0.8rem;"></i>
+                                        </form>
+                                    </td>
+                                    <td>
+                                        {% if sample.assignment %}
+                                        <span class="badge bg-primary">{{ sample.assignment.title }}</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">No Assignment</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ sample.writing_age }}</td>
+                                    <td>
+                                        {% if sample.criteria_marks %}
+                                            {% set total_criteria = sample.criteria_marks|length %}
+                                            {% set criteria_met = 0 %}
+                                            {% set criteria_partial = 0 %}
+                                            
+                                            {% for mark in sample.criteria_marks %}
+                                                {% if mark.score == 2 %}
+                                                    {% set criteria_met = criteria_met + 1 %}
+                                                {% elif mark.score == 1 %}
+                                                    {% set criteria_partial = criteria_partial + 1 %}
+                                                {% endif %}
+                                            {% endfor %}
+                                            
+                                            {% set met_percent = (criteria_met / total_criteria * 100) | round %}
+                                            {% set partial_percent = (criteria_partial / total_criteria * 100) | round %}
+                                            {% set total_mark = (met_percent + (partial_percent / 2)) | round %}
+                                            
+                                            <div class="d-flex align-items-center">
+                                                <div class="h3 mb-0">{{ total_mark }}%</div>
+                                            </div>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <button class="btn btn-sm btn-outline-primary toggle-details" data-sample-id="{{ sample.id }}">
+                                                <i class="fas fa-chevron-down"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteWritingSample('{{ sample.id }}', '{{ sample.filename }}')">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr id="details-{{ sample.id }}" class="details-row d-none">
+                                    <td colspan="7" class="p-0">
+                                        <div class="p-3">
+                                            <h6 class="mb-3 border-bottom pb-2">Text Content</h6>
+                                            <div id="text-{{ sample.id }}" class="text-content mb-3">{{ sample.text_content }}</div>
+                                            
+                                            <div class="row mb-3">
+                                                <div class="col-md-6">
+                                                    <div class="card">
+                                                        <div class="card-header bg-success text-white">
+                                                            <h6 class="mb-0">Strengths</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <ul id="strengths-list-{{ sample.id }}" class="list-group list-group-flush">
+                                                                <!-- Strengths will be populated by JS -->
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="card">
+                                                        <div class="card-header bg-warning text-dark">
+                                                            <h6 class="mb-0">Areas for Development</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <ul id="development-list-{{ sample.id }}" class="list-group list-group-flush">
+                                                                <!-- Development areas will be populated by JS -->
+                                                            </ul>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Store feedback in hidden element for JS processing -->
+                                            <div id="feedback-{{ sample.id }}" class="d-none">{{ sample.feedback }}</div>
+                                            
+                                            {% if sample.assignment and sample.criteria_marks %}
+                                            <div class="row">
+                                                <div class="col-12">
+                                                    <div class="card mb-3">
+                                                        <div class="card-header bg-info text-white">
+                                                            <h6 class="mb-0">Assessment Criteria</h6>
+                                                        </div>
+                                                        <div class="card-body">
+                                                            <div class="table-responsive">
+                                                                <table class="table table-sm table-hover">
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th style="width: 70%">Criteria</th>
+                                                                            <th style="width: 30%">Assessment</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {% for mark in sample.criteria_marks %}
+                                                                        <tr>
+                                                                            <td>{{ mark.criteria.description }}</td>
+                                                                            <td>
+                                                                                <span class="badge {% if mark.score == 2 %}bg-success{% elif mark.score == 1 %}bg-warning{% else %}bg-danger{% endif %}">
+                                                                                    {% if mark.score == 2 %}
+                                                                                        <i class="fas fa-check-circle"></i> Met
+                                                                                    {% elif mark.score == 1 %}
+                                                                                        <i class="fas fa-exclamation-circle"></i> Partially Met
+                                                                                    {% else %}
+                                                                                        <i class="fas fa-times-circle"></i> Not Met
+                                                                                    {% endif %}
+                                                                                </span>
+                                                                            </td>
+                                                                        </tr>
+                                                                        {% endfor %}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                            
+                                            <div class="row">
+                                                <div class="col-12 text-end">
+                                                    <button class="btn btn-outline-secondary btn-sm me-2" onclick="printWritingReport('{{ sample.id }}')">
+                                                        <i class="fas fa-print me-1"></i> Print Report
+                                                    </button>
+                                                    <button class="btn btn-outline-primary btn-sm toggle-highlight-mode" data-apply-ai-highlights="true">
+                                                        <i class="fas fa-highlighter me-1"></i> Show Criteria Marking
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bulk Delete Modal -->
+    <div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-labelledby="bulkDeleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="bulkDeleteModalLabel">Bulk Delete Writing Samples</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="bulkDeleteForm" method="POST" action="{{ url_for('bulk_delete_writing') }}">
+                        <p class="mb-3">Select writing samples to delete. This action cannot be undone.</p>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="selectAllSamples">
+                            <label class="form-check-label" for="selectAllSamples">
+                                <strong>Select All</strong>
+                            </label>
+                        </div>
+                        <hr>
+                        <div class="sample-list">
+                            {% for sample in writing_samples %}
+                            <div class="form-check mb-2">
+                                <input class="form-check-input sample-checkbox" type="checkbox" name="writing_ids" value="{{ sample.id }}" id="sample-{{ sample.id }}">
+                                <label class="form-check-label" for="sample-{{ sample.id }}">
+                                    {{ sample.filename }} ({{ sample.created_at.strftime('%d %b %Y') }})
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" form="bulkDeleteForm" class="btn btn-danger" id="bulkDeleteBtn" disabled>Delete Selected</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Student Modal -->
+    <div class="modal fade" id="deleteStudentModal" tabindex="-1" aria-labelledby="deleteStudentModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteStudentModalLabel">Delete Student</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete <strong>{{ student.first_name }} {{ student.last_name }}</strong>?</p>
+                    <p class="text-danger"><strong>Warning:</strong> This will permanently delete the student and all associated writing samples, assessments, and other data. This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <a href="{{ url_for('delete_student', student_id=student.id) }}" class="btn btn-danger">Delete Student</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Chart toggle functionality
+    const genreChartBtn = document.getElementById('genreChartBtn');
+    const ageChartBtn = document.getElementById('ageChartBtn');
+    const genreChart = document.getElementById('genreChart');
+    const ageChart = document.getElementById('ageChart');
+    
+    genreChartBtn.addEventListener('click', function() {
+        genreChart.style.display = 'block';
+        ageChart.style.display = 'none';
+        genreChartBtn.classList.add('active');
+        ageChartBtn.classList.remove('active');
+    });
+    
+    ageChartBtn.addEventListener('click', function() {
+        genreChart.style.display = 'none';
+        ageChart.style.display = 'block';
+        genreChartBtn.classList.remove('active');
+        ageChartBtn.classList.add('active');
+    });
+    
+    // Bulk delete checkbox functionality
+    const selectAllCheckbox = document.getElementById('selectAllSamples');
+    const sampleCheckboxes = document.querySelectorAll('.sample-checkbox');
+    const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+    
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            const isChecked = this.checked;
+            sampleCheckboxes.forEach(checkbox => {
+                checkbox.checked = isChecked;
+            });
+            updateDeleteButtonState();
+        });
+    }
+    
+    sampleCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateDeleteButtonState);
+    });
+    
+    function updateDeleteButtonState() {
+        const anyChecked = Array.from(sampleCheckboxes).some(checkbox => checkbox.checked);
+        bulkDeleteBtn.disabled = !anyChecked;
+    }
+    
+    // Generate the genre chart
+    const genreCtx = document.getElementById('genreChart').getContext('2d');
+    new Chart(genreCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ genre_labels|tojson }},
+            datasets: [{
+                label: 'Average % Criteria Met',
+                data: {{ genre_scores|tojson }},
+                backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Criteria Met (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Genre'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Performance by Genre',
+                    font: {
+                        size: 16
+                    }
+                },
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+    
+    // Generate the age comparison chart
+    const ageCtx = document.getElementById('ageChart').getContext('2d');
+    new Chart(ageCtx, {
+        type: 'line',
+        data: {
+            labels: {{ age_dates|tojson }},
+            datasets: [{
+                label: 'Writing Age',
+                data: {{ age_values|tojson }},
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Writing Age'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Writing Age Progression',
+                    font: {
+                        size: 16
+                    }
+                }
+            }
+        }
+    });
+    
+    // This function is now handled by portfolio_collapsible.js
+    function populateAnalysisData(sampleId) {
+        // Functionality moved to portfolio_collapsible.js
+        // This empty function remains to prevent any existing calls to it from breaking
+    }
+});
+
+// Function to handle writing sample deletion
+function deleteWritingSample(id, filename) {
+    if (confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
+        fetch(`/writing/${id}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                alert('Error deleting the writing sample.');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while trying to delete the writing sample.');
+        });
+    }
+}
+
+// Function to print writing report
+function printWritingReport(id) {
+    window.open(`/writing/${id}/print`, '_blank');
+}
+</script>
+
+<!-- External scripts -->
+<script src="{{ url_for('static', filename='js/portfolio_collapsible.js') }}"></script>
+<script src="{{ url_for('static', filename='js/portfolio_highlighting.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Take a Photo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .image-preview {
+            max-width: 100%;
+            border-radius: 8px;
+            display: none;
+            margin: 20px 0;
+        }
+        .result-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .alert {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <div class="text-center mb-4">
+            <h2>Take a Photo</h2>
+            <p class="text-muted">Capture a writing sample to analyze</p>
+        </div>
+        
+        <div class="d-grid gap-3">
+            <button id="take-photo-btn" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-camera me-2" viewBox="0 0 16 16">
+                    <path d="M15 12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.172a3 3 0 0 0 2.12-.879l.83-.828A1 1 0 0 1 6.827 3h2.344a1 1 0 0 1 .707.293l.828.828A3 3 0 0 0 12.828 5H14a1 1 0 0 1 1 1zM2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4z"/>
+                    <path d="M8 11a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5m0 1a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M3 6.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0"/>
+                </svg>
+                Take Photo
+            </button>
+            
+            <a href="{{ url_for('add_writing') }}" class="btn btn-outline-secondary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-left me-2" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8"/>
+                </svg>
+                Back to Writing Form
+            </a>
+        </div>
+        
+        <div class="text-center my-4">
+            <img id="preview" class="image-preview" alt="Preview">
+        </div>
+        
+        <div id="result-container" class="result-container">
+            <div class="d-grid gap-3">
+                <form id="upload-form" method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="student_id" value="{{ student_id }}">
+                    <input type="hidden" name="assignment_id" value="{{ assignment_id }}">
+                    <button type="submit" class="btn btn-success w-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-check2 me-2" viewBox="0 0 16 16">
+                            <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
+                        </svg>
+                        Process Image
+                    </button>
+                </form>
+                
+                <button id="retake-btn" class="btn btn-outline-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-camera me-2" viewBox="0 0 16 16">
+                        <path d="M15 12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.172a3 3 0 0 0 2.12-.879l.83-.828A1 1 0 0 1 6.827 3h2.344a1 1 0 0 1 .707.293l.828.828A3 3 0 0 0 12.828 5H14a1 1 0 0 1 1 1zM2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4z"/>
+                        <path d="M8 11a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5m0 1a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M3 6.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0"/>
+                    </svg>
+                    Take a Different Photo
+                </button>
+            </div>
+        </div>
+        
+        <div id="alert-container"></div>
+    </div>
+    
+    <!-- Hidden file input -->
+    <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none;">
+    
+    <script>
+        // This is a completely independent script with no dependencies
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elements
+            const takePhotoBtn = document.getElementById('take-photo-btn');
+            const fileInput = document.getElementById('file-input');
+            const preview = document.getElementById('preview');
+            const resultContainer = document.getElementById('result-container');
+            const retakeBtn = document.getElementById('retake-btn');
+            const uploadForm = document.getElementById('upload-form');
+            const alertContainer = document.getElementById('alert-container');
+            
+            // Captured image data
+            let capturedImage = null;
+            
+            // Flag to prevent automatic reopening
+            let cameraActive = false;
+            
+            // Take photo button click handler
+            takePhotoBtn.addEventListener('click', function() {
+                if (cameraActive) {
+                    console.log("Camera already active, ignoring");
+                    return;
+                }
+                
+                cameraActive = true;
+                triggerCamera();
+            });
+            
+            // Function to trigger camera
+            function triggerCamera() {
+                try {
+                    console.log("Triggering camera...");
+                    
+                    // Get the current file input (might be the original or recreated one)
+                    const currentInput = document.getElementById('file-input');
+                    
+                    if (currentInput) {
+                        // Reset the input to ensure the change event fires
+                        currentInput.value = '';
+                        // Explicitly request the camera on mobile devices
+                        currentInput.setAttribute('capture', 'environment');
+                        
+                        // Add change event listener to the current input
+                        currentInput.addEventListener('change', function(e) {
+                            if (e.target.files && e.target.files.length > 0) {
+                                const file = e.target.files[0];
+                                console.log("Image captured:", file.name);
+                                
+                                // CRITICAL: Completely remove the input element to prevent re-triggering
+                                currentInput.value = '';
+                                currentInput.remove();
+                                
+                                // Create object URL for preview
+                                const url = URL.createObjectURL(file);
+                                preview.src = url;
+                                preview.style.display = 'block';
+                                
+                                // Store the file for later upload
+                                capturedImage = file;
+                                
+                                // Show result container with buttons
+                                resultContainer.style.display = 'block';
+                                
+                                // Show success message
+                                showAlert("Photo captured successfully!", "success");
+                                
+                                // Recreate the file input only when needed for the retake
+                                const newInput = document.createElement('input');
+                                newInput.type = 'file';
+                                newInput.id = 'file-input';
+                                newInput.accept = 'image/*';
+                                newInput.setAttribute('capture', 'environment');
+                                newInput.style.display = 'none';
+                                document.body.appendChild(newInput);
+                                
+                                // Reset camera flag
+                                cameraActive = false;
+                            }
+                        });
+                        
+                        // Trigger the camera
+                        currentInput.click();
+                    } else {
+                        console.error("File input element not found");
+                        showAlert("Error: Camera component not found", "danger");
+                        cameraActive = false;
+                    }
+                } catch (error) {
+                    console.error("Error triggering camera:", error);
+                    showAlert("Error opening camera. Please try again.", "danger");
+                    cameraActive = false;
+                }
+            }
+            
+            // Initial setup - we'll handle change events directly in triggerCamera for each element
+            console.log("Camera ready - waiting for user interaction");
+            
+            // Retake button handler
+            retakeBtn.addEventListener('click', function() {
+                if (!cameraActive) {
+                    cameraActive = true;
+                    triggerCamera();
+                }
+            });
+            
+            // Form submission handler
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                if (!capturedImage) {
+                    showAlert("Please take a photo first", "warning");
+                    return;
+                }
+                
+                // Create form data for submission
+                const formData = new FormData();
+                formData.append('image', capturedImage);
+                
+                // Add student and assignment IDs if available
+                const studentId = document.querySelector('input[name="student_id"]').value;
+                const assignmentId = document.querySelector('input[name="assignment_id"]').value;
+                
+                if (studentId) {
+                    formData.append('student_id', studentId);
+                }
+                
+                if (assignmentId) {
+                    formData.append('assignment_id', assignmentId);
+                }
+                
+                // Disable buttons during processing
+                const submitBtn = uploadForm.querySelector('button');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+                
+                // Submit the image
+                fetch('/process_image', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.writing_id) {
+                        // Success - redirect to writing page
+                        window.location.href = `/writing/${data.writing_id}`;
+                    } else {
+                        // Error
+                        showAlert(data.error || "Error processing image", "danger");
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = 'Process Image';
+                    }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    showAlert("An error occurred while processing your image", "danger");
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = 'Process Image';
+                });
+            });
+            
+            // Helper function to show alerts
+            function showAlert(message, type) {
+                const alert = document.createElement('div');
+                alert.className = `alert alert-${type} alert-dismissible fade show`;
+                alert.innerHTML = `
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                
+                alertContainer.innerHTML = '';
+                alertContainer.appendChild(alert);
+                
+                // Auto-dismiss after 5 seconds
+                setTimeout(() => {
+                    alert.classList.remove('show');
+                    setTimeout(() => alert.remove(), 150);
+                }, 5000);
+            }
+            
+            // Auto-open camera on mobile devices
+            if (/Mobi|Android/i.test(navigator.userAgent)) {
+                setTimeout(() => {
+                    if (!cameraActive) {
+                        takePhotoBtn.click();
+                    }
+                }, 500);
+            }
+        });
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

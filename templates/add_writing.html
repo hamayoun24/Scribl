@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+
+{% block title %}Add Writing Sample{% endblock %}
+
+{% block extra_head %}
+<!-- Cache control -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Add Writing Sample</h4>
+                </div>
+                <div class="card-body">
+                    <form id="writingForm" method="POST" enctype="multipart/form-data">
+                        <!-- Class Selection -->
+                        <div class="mb-3">
+                            <label for="class_id" class="form-label">Select Class</label>
+                            <select class="form-select bg-white text-dark" id="class_id" name="class_id" required style="background-color: white !important; color: black !important;">
+                                <option value="" style="background-color: white !important; color: black !important;">Choose a class...</option>
+                                {% for class in classes %}
+                                <option value="{{ class.id }}" {% if selected_class_id == class.id %}selected{% endif %} style="background-color: white !important; color: black !important;">
+                                    {{ class.name }} ({{ class.year_group }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Student Selection -->
+                        <div class="mb-3">
+                            <label for="student_id" class="form-label">Select Student</label>
+                            <select class="form-select bg-white text-dark" id="student_id" name="student_id" required {% if not students %}disabled{% endif %} style="background-color: white !important; color: black !important;">
+                                <option value="" style="background-color: white !important; color: black !important;">Choose a student...</option>
+                                {% for student in students %}
+                                <option value="{{ student.id }}" style="background-color: white !important; color: black !important;">{{ student.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Assignment Selection -->
+                        <div class="mb-3">
+                            <label for="assignment_id" class="form-label">Assignment (Optional)</label>
+                            <select class="form-select bg-white text-dark" id="assignment_id" name="assignment_id" {% if not assignments %}disabled{% endif %} style="background-color: white !important; color: black !important;">
+                                <option value="" style="background-color: white !important; color: black !important;">No assignment - free writing</option>
+                                {% for assignment in assignments %}
+                                <option value="{{ assignment.id }}" style="background-color: white !important; color: black !important;">{{ assignment.title }} ({{ assignment.genre }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Camera buttons -->
+                        <div class="d-flex flex-column gap-2 mb-3">
+                            <button type="button" class="btn btn-primary w-100" id="add-image-btn">
+                                <i class="fa fa-camera me-2"></i>Add Image
+                            </button>
+                            
+                            <a href="/single-camera?student_id={{ request.args.get('student_id', '') }}&assignment_id={{ request.args.get('assignment_id', '') }}" 
+                               class="btn btn-success w-100">
+                                <i class="fa fa-camera me-2"></i>Single-Shot Camera (No Double Capture)
+                            </a>
+                            
+                            <a href="/mobile-camera?student_id={{ request.args.get('student_id', '') }}&assignment_id={{ request.args.get('assignment_id', '') }}" 
+                               class="btn btn-outline-primary w-100 mt-2">
+                                <i class="fa fa-mobile-alt me-2"></i>Original Camera
+                            </a>
+                        </div>
+
+                        <!-- REMOVED CAMERA INPUT - We'll create it dynamically only when needed -->
+
+                        <!-- Image preview -->
+                        <div id="preview-container" class="d-none mb-3">
+                            <img id="image-preview" class="img-fluid rounded mb-3" alt="Preview">
+
+                        </div>
+
+                        <!-- Add Another Image button has been completely removed as requested -->
+
+                        <!-- Submit button -->
+                        <div class="d-grid mt-3">
+                            <button type="submit" class="btn btn-success btn-lg" disabled>
+                                <i class="fa fa-check me-2"></i>Process Images
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Results section -->
+                    <div id="results" class="mt-4 d-none">
+                        <h5 style="color: #000000;">Analysis Results</h5>
+                        <div id="analysisResults" style="color: #000000; font-size: 1.1rem;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- EMERGENCY SINGLE-SHOT CAMERA IMPLEMENTATION THAT DOES NOT REOPEN -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("EMERGENCY CAMERA FIX LOADED - ONE SHOT ONLY");
+    
+    // Completely remove Add Another Image button as requested
+    const addMoreButton = document.getElementById('add-more-btn');
+    if (addMoreButton && addMoreButton.parentNode) {
+        // Remove the entire button container from the DOM
+        const buttonContainer = addMoreButton.closest('.mt-3');
+        if (buttonContainer && buttonContainer.parentNode) {
+            buttonContainer.parentNode.removeChild(buttonContainer);
+        }
+    }
+    
+    // Cache DOM elements
+    const form = document.getElementById('writingForm');
+    const addImageBtn = document.getElementById('add-image-btn');
+    // No more "Add Another Image" button as it's been completely removed
+    const previewContainer = document.getElementById('preview-container');
+    const imagePreview = document.getElementById('image-preview');
+    const submitBtn = document.querySelector('button[type="submit"]');
+    
+    // State variables
+    let imageFiles = [];
+    let currentImageIndex = 0;
+    let cameraInProgress = false;
+
+    // Helper functions
+    function showNotification(message, type = 'success') {
+        const notificationContainer = document.getElementById('notification-container') || 
+                                    (() => {
+                                        const container = document.createElement('div');
+                                        container.id = 'notification-container';
+                                        container.style.position = 'fixed';
+                                        container.style.top = '20px';
+                                        container.style.right = '20px';
+                                        container.style.zIndex = '9999';
+                                        document.body.appendChild(container);
+                                        return container;
+                                    })();
+        
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type} alert-dismissible fade show`;
+        notification.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        
+        notificationContainer.appendChild(notification);
+        
+        // Auto dismiss after 3 seconds
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+    
+    // COMPLETELY ISOLATED ONE-SHOT CAMERA WITH ADDITIONAL SAFEGUARDS
+    function takeSinglePicture() {
+        if (cameraInProgress) {
+            console.log("Camera already active - ignoring request");
+            return;
+        }
+        
+        cameraInProgress = true;
+        console.log("EMERGENCY SINGLE SHOT CAMERA ACTIVATED");
+        
+        // Create one-time camera input - with capture attribute but also safeguards
+        const cameraInput = document.createElement('input');
+        cameraInput.type = 'file';
+        cameraInput.style.display = 'none';
+        cameraInput.accept = 'image/*';
+        cameraInput.capture = 'environment'; // Re-added to open camera directly instead of gallery
+        
+        // Add to body, not to form
+        document.body.appendChild(cameraInput);
+        
+        // One-time event handler with extensive cancellation handling
+        cameraInput.addEventListener('change', function onceOnly(e) {
+            // Prevent default behavior and stop propagation
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            if (e.target.files && e.target.files.length > 0) {
+                console.log("Camera captured image:", e.target.files[0].name);
+                
+                const file = e.target.files[0];
+                const imageUrl = URL.createObjectURL(file);
+                
+                imageFiles.push({
+                    file: file,
+                    url: imageUrl
+                });
+                
+                // Update UI
+                imagePreview.src = imageUrl;
+                previewContainer.classList.remove('d-none');
+                
+                // Enable submit button
+                submitBtn.disabled = false;
+                
+                // Show success notification
+                showNotification("Image captured successfully!");
+            }
+            
+            // Critical: IMMEDIATELY clean up all event listeners and remove input element
+            try {
+                cameraInput.removeEventListener('change', onceOnly);
+                cameraInput.onchange = null; // Additional cleanup
+                
+                // Delayed removal to ensure proper cleanup
+                setTimeout(() => {
+                    try {
+                        document.body.removeChild(cameraInput);
+                    } catch (err) {
+                        console.log("Camera input already removed");
+                    }
+                    cameraInProgress = false;
+                    console.log("Camera input fully removed from document");
+                }, 100);
+            } catch (err) {
+                console.error("Error cleaning up camera:", err);
+                cameraInProgress = false;
+            }
+            
+            return false; // Prevent form submission
+        });
+        
+        // Trigger the camera once
+        setTimeout(() => {
+            try {
+                cameraInput.click();
+            } catch (err) {
+                console.error("Error opening camera:", err);
+                cameraInput.remove();
+                cameraInProgress = false;
+            }
+        }, 50);
+    }
+    
+    // Event Listeners - Only add event listener for the Add Image button
+    if (addImageBtn) {
+        addImageBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log("Add image button clicked");
+            takeSinglePicture();
+        });
+    }
+    
+    // Add Another Image button has been completely removed as requested
+    
+    // Form submission
+    if (form) {
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (imageFiles.length === 0) {
+                showNotification('Please take at least one photo or upload an image.', 'warning');
+                return;
+            }
+            
+            // Get form data
+            const formData = new FormData();
+            
+            // Add all captured images
+            imageFiles.forEach((imageData) => {
+                formData.append('image', imageData.file);
+            });
+            
+            // Add student and assignment IDs
+            const studentSelect = document.getElementById('student-select') || document.getElementById('student_id');
+            const assignmentSelect = document.getElementById('assignment-select') || document.getElementById('assignment_id');
+            
+            if (studentSelect && !studentSelect.value) {
+                showNotification('Please select a student.', 'warning');
+                return;
+            }
+            
+            if (studentSelect) {
+                formData.append('student_id', studentSelect.value);
+            }
+            
+            if (assignmentSelect && assignmentSelect.value) {
+                formData.append('assignment_id', assignmentSelect.value);
+            }
+            
+            // Disable submit button and show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-2"></i>Processing...';
+            
+            try {
+                // Submit to server
+                const response = await fetch('/process_image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showNotification('Images processed successfully!');
+                    // Redirect to results page
+                    window.location.href = `/writing/${result.writing_id}`;
+                } else {
+                    showNotification(result.error || 'Failed to process images.', 'danger');
+                    // Reset button state
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fa fa-check me-2"></i>Process Images';
+                }
+            } catch (error) {
+                console.error('Error submitting form:', error);
+                showNotification('An error occurred while processing the images.', 'danger');
+                // Reset button state
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fa fa-check me-2"></i>Process Images';
+            }
+        });
+    }
+    
+    // Class/Student selection handlers
+    const classSelect = document.getElementById('class_id');
+    
+    if (classSelect) {
+        classSelect.addEventListener('change', async function() {
+            const classId = this.value;
+            const studentSelect = document.getElementById('student_id');
+            const assignmentSelect = document.getElementById('assignment_id');
+            
+            if (!classId) {
+                // Reset and disable dependent dropdowns
+                if (studentSelect) {
+                    studentSelect.innerHTML = '<option value="">Choose a student...</option>';
+                    studentSelect.disabled = true;
+                }
+                
+                if (assignmentSelect) {
+                    assignmentSelect.innerHTML = '<option value="">No assignment - free writing</option>';
+                    assignmentSelect.disabled = true;
+                }
+                
+                return;
+            }
+            
+            try {
+                // Fetch students for selected class
+                const studentsResponse = await fetch(`/get_students/${classId}`);
+                const students = await studentsResponse.json();
+                
+                if (studentSelect) {
+                    // Enable and populate student dropdown
+                    studentSelect.disabled = false;
+                    studentSelect.innerHTML = '<option value="">Choose a student...</option>';
+                    
+                    students.forEach(student => {
+                        const option = document.createElement('option');
+                        option.value = student.id;
+                        option.textContent = student.name;
+                        option.style.backgroundColor = 'white';
+                        option.style.color = 'black';
+                        studentSelect.appendChild(option);
+                    });
+                }
+                
+                // Fetch assignments for selected class
+                const assignmentsResponse = await fetch(`/get_assignments/${classId}`);
+                const assignments = await assignmentsResponse.json();
+                
+                if (assignmentSelect) {
+                    // Enable and populate assignment dropdown
+                    assignmentSelect.disabled = false;
+                    assignmentSelect.innerHTML = '<option value="">No assignment - free writing</option>';
+                    
+                    assignments.forEach(assignment => {
+                        const option = document.createElement('option');
+                        option.value = assignment.id;
+                        option.textContent = `${assignment.title} (${assignment.genre})`;
+                        option.style.backgroundColor = 'white';
+                        option.style.color = 'black';
+                        assignmentSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching class data:', error);
+                showNotification('Error loading class data. Please try again.', 'danger');
+            }
+        });
+    }
+    
+    // Auto-trigger class selection if value exists
+    if (classSelect && classSelect.value) {
+        const event = new Event('change');
+        classSelect.dispatchEvent(event);
+    }
+});
+</script>
+{% endblock %}
+
+<!-- Removed conflicting HTML tags -->

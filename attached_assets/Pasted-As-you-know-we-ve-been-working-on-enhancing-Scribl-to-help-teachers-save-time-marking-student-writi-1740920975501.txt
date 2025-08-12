@@ -1,0 +1,20 @@
+As you know, we've been working on enhancing Scribl to help teachers save time marking student writing by augmenting the marking process. The core idea is to have the AI analysis generate success criteria (SC) markers—each with a justification (containing example phrases in single quotes) and a score (1 for partially met, 2 for fully met). Teachers then use Scribl to view the extracted text from a student's writing sample with these examples highlighted, so they can quickly confirm and adjust their marks as needed (remember, our goal is to get them 70% of the way there, ideally 100%, with minimal manual correction).
+
+I need to implement a robust two-pass highlighting feature that meets these requirements:
+
+First Pass:
+The AI already analyzes the writing sample and returns the criteria_marks array with the necessary SC details. This process remains unchanged.
+
+Second Pass – Highlighting:
+We want a helper function (e.g., highlightText) to re-read the extracted text and highlight the examples provided in the SC markers. The highlighting should:
+
+Use yellow (.highlight-partial) for examples where the score is 1 (partially met).
+Use green (.highlight-full) for examples where the score is 2 (fully met).
+Process the text robustly by collecting all occurrences of each example (case-insensitive), sorting by length (longest first), and merging overlapping ranges to avoid nested or duplicated highlights.
+Additional Context & Use Scenarios:
+
+Teachers use Scribl not only to receive automated analysis but to comply with their school's marking policy by physically marking student workbooks. Seeing these highlighted examples in the extracted text speeds up that process.
+Since success criteria are dynamically created by teachers, our solution must work with teacher-defined examples without relying on a fixed dictionary.
+We may also consider a manual override step later, where teachers can remove or add highlights, but for now, the focus is on the two-pass process integrated seamlessly into the current workflow.
+Please provide updated JavaScript code for this robust highlightText helper function along with any necessary CSS changes. Ensure the new code integrates with the existing Scribl structure and preserves current functionality while achieving our goal of clear, accurate, and non-overlapping highlights.
+

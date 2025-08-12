@@ -1,0 +1,69 @@
+Data Protection Policy for Scribl
+Effective Date: [Insert Date]
+
+1. Introduction
+At Scribl, provided by Classify Education Services FZCO ("we", "us", or "our"), we take data protection and privacy very seriously. This Data Protection Policy explains how we process, store, and protect any personal data collected from users of our website and web application (collectively, the "Site"). This policy is designed to comply with applicable UAE laws and regulations.
+
+2. Data Controller
+Classify Education Services FZCO is the data controller for all personal data processed through Scribl.
+Contact Information:
+
+Email: [Your Contact Email]
+Address: [Your Company Address, UAE]
+3. Data We Collect
+3.1 Personal Data
+For account creation, authentication, and secure login, we collect minimal personal information, which includes:
+
+Name
+Email Address
+3.2 Non-Personal and Usage Data
+Writing Samples and Assessment Data:
+Data submitted for writing assessments is processed in real time to generate AI-driven feedback and is not stored beyond what is necessary to deliver the service.
+Server Logs:
+Standard technical information (such as IP addresses, access times, and browser details) may be logged by our hosting provider, SiteGround, for maintenance, security, and performance purposes. These logs are not used to personally identify you.
+4. Purpose and Legal Basis for Processing
+4.1 Purpose
+Account Management:
+Personal data is used solely for managing user accounts, authentication, and providing access to Scribl.
+Service Provision:
+Non-personal data (e.g., writing samples) is processed to deliver AI assessments, including success criteria analysis and writing age estimation.
+Security and Maintenance:
+Technical data is logged for monitoring, diagnosing issues, and ensuring the security and performance of our services.
+4.2 Legal Basis
+Processing of your personal data is based on:
+
+Consent:
+By creating an account and using Scribl, you consent to the processing of your personal data for the purposes outlined in this Policy.
+Legitimate Interests:
+The processing is necessary for the legitimate interests of providing, maintaining, and improving the Site and its services, while ensuring your security and the security of our infrastructure.
+Legal Obligations:
+We process data as required to comply with applicable laws and regulatory obligations within the UAE.
+5. Data Storage, Retention, and Transfers
+Storage and Retention:
+Personal data (name and email) is stored securely and retained only for as long as necessary for account management. Writing samples and assessment data are processed in real time and not retained beyond the immediate provision of the service.
+Data Transfers:
+Personal data is processed and stored within the United Arab Emirates. Should any transfer of data outside the UAE occur, we will ensure that appropriate safeguards are in place in accordance with applicable law.
+6. Security Measures
+We employ industry-standard security measures to protect your data from unauthorized access, disclosure, alteration, or destruction. While we strive to maintain a secure environment, no method of transmission over the internet or electronic storage is entirely secure.
+
+7. Your Rights
+Under applicable UAE law, you have the right to:
+
+Access the personal data we hold about you.
+Request corrections or updates to your personal data.
+Request deletion of your personal data.
+Object to or restrict the processing of your personal data.
+If you wish to exercise any of these rights or have questions about our data processing practices, please contact us using the details provided in Section 2.
+
+8. Third-Party Services
+Scribl is hosted on SiteGround, which may log technical data as part of its standard operations. These logs are maintained according to SiteGround's policies and are not used to personally identify you. We do not share your personal data with third parties except as necessary to deliver our services or comply with legal obligations.
+
+9. Changes to This Data Protection Policy
+We may update this Data Protection Policy from time to time. Any changes will be posted on this page along with an updated effective date. Your continued use of Scribl after any modifications constitutes your acceptance of the updated Policy.
+
+10. Contact Us
+If you have any questions, concerns, or requests regarding this Data Protection Policy or our data practices, please contact us at:
+
+Email: [Your Contact Email]
+Address: [Your Company Address, UAE]
+

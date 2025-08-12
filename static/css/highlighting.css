@@ -1,0 +1,399 @@
+/* Highlighting feature styles */
+.toggle-highlight-mode.active {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.highlight-controls {
+    display: none;
+    margin-top: 10px;
+    padding: 8px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    border: 1px solid #e9ecef;
+}
+
+.highlight-colors button.color-button {
+    width: 24px;
+    height: 24px;
+    margin-right: 5px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+    min-width: unset;
+    font-size: 0;
+    line-height: 0;
+    color: transparent;
+    overflow: hidden;
+}
+
+.highlight-colors button.active {
+    box-shadow: 0 0 0 0.15rem rgba(0, 0, 0, 0.4);
+    transform: scale(1.05);
+}
+
+.sample-text, .extracted-text {
+    white-space: pre-wrap;
+    font-family: inherit;
+    line-height: 1.5;
+    padding: 10px;
+    background-color: white;
+    border-radius: 5px;
+    border: 1px solid #ced4da;
+    overflow-x: auto;
+    margin-bottom: 15px;
+    color: #000000 !important;
+    font-size: 1.1rem;
+}
+
+.highlighted-text {
+    border-radius: 2px;
+    padding: 1px 0;
+}
+
+.clear-highlights {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clear-highlights:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+/* Add tooltip for better UX */
+[data-toggle="tooltip"] {
+    position: relative;
+}
+
+[data-toggle="tooltip"]:hover::after {
+    content: attr(data-title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 5px 10px;
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+}
+/* Highlighting styles */
+.sample-text {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    line-height: 1.5;
+}
+
+.highlight-controls {
+    display: none;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 0.25rem;
+    border: 1px solid #dee2e6;
+}
+
+.highlight-colors button {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #ced4da;
+    margin-right: 0.25rem;
+}
+
+.highlight-colors button:hover {
+    border-color: #6c757d;
+}
+
+.highlight-colors button.active {
+    border: 2px solid #212529;
+}
+
+.toggle-highlight-mode.active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+/* New highlight classes */
+.highlight-full {
+    background-color: #90ee90;
+    padding: 2px 0;
+    border-radius: 2px;
+    position: relative;
+    cursor: pointer;
+}
+
+.highlight-partial {
+    background-color: #ffff00;
+    padding: 2px 0;
+    border-radius: 2px;
+    position: relative;
+    cursor: pointer;
+}
+
+/* Ensure existing highlight class continues to work */
+.highlight {
+    padding: 2px 0;
+    border-radius: 2px;
+    position: relative;
+    cursor: pointer;
+}
+
+/* Style for criteria boxes based on their score */
+.criteria-box, .alert-heading, .list-group-item h6 {
+    padding: 12px;
+    margin-bottom: 15px;
+    border-radius: 6px;
+    transition: background-color 0.2s;
+    border: 1px solid #ddd;
+    color: #000000 !important;
+}
+
+/* We're now using inline styling for criteria boxes, 
+   so these selectors are intentionally left without a background-color */
+.criteria-box[data-score="0"],
+.criteria-box-score-0 {
+    background-color: #fff1f1; /* Even softer light red - pastel */
+    border-left: 4px solid #ffe4e4;
+}
+
+.criteria-box[data-score="1"],
+.criteria-box-score-1 {
+    background-color: #fffbeb; /* Even softer light yellow - pastel */
+    border-left: 4px solid #fff7d6;
+}
+
+.criteria-box[data-score="2"],
+.criteria-box-score-2 {
+    background-color: #f5fff5; /* Even softer light green - pastel */
+    border-left: 4px solid #e4ffe4;
+}
+
+/* Tooltip functionality for highlights */
+.highlight-full:hover::after,
+.highlight-partial:hover::after,
+.highlight:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+/* Added styles for AI highlights */
+.ai-highlight {
+    background-color: yellow;
+    padding: 2px;
+    border-radius: 2px;
+    cursor: pointer;
+    display: inline-block;
+    position: relative;
+    margin: 0 1px;
+}
+
+/* Make highlight tooltip more visible */
+.ai-tooltip {
+    position: absolute;
+    z-index: 1000;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0.9;
+    transform: translateY(-100%);
+    top: -5px;
+    left: 0;
+}
+
+/* Style for criteria marks with different achievement levels */
+/* Style for score 0 marks - with differentiating styles based on criteria type */
+.criteria-mark-0 {
+    background-color: transparent !important; /* No background for score 0 */
+    border-bottom: 1px solid #f88;
+    padding: 1px 0;
+    display: inline;
+    position: relative;
+    cursor: help;
+}
+
+/* Only apply wavy red underlines for spelling and capitalization errors */
+.criteria-mark-0[data-criteria*="spelling"], 
+.criteria-mark-0[data-criteria*="capital"],
+.criteria-mark-0[data-criteria*="punctuation"] {
+    text-decoration: underline;
+    text-decoration-color: #f88;
+    text-decoration-style: wavy;
+    border-bottom: none; /* Remove the solid border for these specific errors */
+}
+
+.criteria-mark-1 {
+    background-color: #ffffaa !important; /* Light yellow - partially meeting criteria */
+    border-bottom: 2px solid #cc0;
+    padding: 1px 0;
+    border-radius: 2px;
+    display: inline;
+    position: relative;
+    cursor: help;
+}
+
+.criteria-mark-2 {
+    background-color: #c2f0c2 !important; /* Light green - fully meeting criteria */
+    border-bottom: 2px solid #6c6;
+    padding: 1px 0;
+    border-radius: 2px;
+    display: inline;
+    position: relative;
+    cursor: help;
+}
+
+/* Tooltip for highlighted text showing associated criteria */
+[data-tooltip] {
+    position: relative;
+    cursor: help;
+}
+
+/* We won't use the ::after pseudo-element for tooltips anymore */
+/* Instead, we'll create tooltips with JavaScript */
+.custom-tooltip {
+    position: fixed;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 4px;
+    font-size: 14px;
+    z-index: 9999;
+    pointer-events: none;
+    max-width: 300px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+    transition: opacity 0.15s;
+    word-wrap: break-word;
+    white-space: normal;
+    opacity: 1;
+    user-select: none;
+}
+
+/* Styles for highlight tooltip */
+.highlight-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    max-width: 250px;
+    z-index: 1000;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    pointer-events: all;
+    transition: opacity 0.2s;
+    text-align: left;
+}
+
+/* Style for removable highlights */
+[data-removable="true"] {
+    position: relative;
+    cursor: pointer;
+}
+
+[data-removable="true"]:hover {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+[data-removable="true"]:hover:after {
+    content: '';
+    position: absolute;
+    right: -2px;
+    top: -2px;
+    width: 6px;
+    height: 6px;
+    background-color: rgba(220, 53, 69, 0.7);
+    border-radius: 50%;
+}
+
+.highlight-instructions {
+    font-style: italic;
+    margin-bottom: 5px;
+}
+
+.ai-highlight:after {
+    content: attr(title);
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    transition: opacity 0.3s;
+    z-index: 1000;
+}
+
+.ai-highlight:hover:after {
+    visibility: visible;
+    opacity: 1;
+}
+
+.highlight-controls {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.highlight-colors {
+    display: flex;
+    gap: 5px;
+}
+
+.color-button {
+    width: 40px;
+    height: 30px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.color-button.active {
+    box-shadow: 0 0 0 2px #000;
+    transform: scale(1.1);
+}
+
+.criteria-legend {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #666;
+}
+
+.criteria-legend-item {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 15px;
+}
+
+.criteria-legend-color {
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+    margin-right: 5px;
+    border-radius: 2px;
+}

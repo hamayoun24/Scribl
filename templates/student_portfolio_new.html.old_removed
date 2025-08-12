@@ -1,0 +1,461 @@
+{% extends 'base.html' %}
+{% from 'macros.html' import student_info_card with context %}
+
+{% block title %}{{ student.first_name }} {{ student.last_name }}'s Portfolio{% endblock %}
+
+{% block head %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/chart-styles.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Student Portfolio: {{ student.first_name }} {{ student.last_name }}</h2>
+            <p class="lead text-muted">
+                {{ student.class_group.name }} ({{ student.class_group.year_group }})
+            </p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{{ url_for('classes') }}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left"></i> Back to Class
+            </a>
+            <a href="{{ url_for('export_student_portfolio', student_id=student.id) }}" class="btn btn-success">
+                <i class="fas fa-file-excel"></i> Export Portfolio
+            </a>
+        </div>
+    </div>
+
+    <!-- Student info card -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            {{ student_info_card(student) }}
+        </div>
+    </div>
+
+    <!-- Analytics section -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Analytics</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Chart toggle buttons -->
+                    <div class="chart-toggle">
+                        <button id="genreChartBtn" class="active">Marks by Genre</button>
+                        <button id="ageChartBtn">Age Comparison</button>
+                    </div>
+
+                    <!-- Chart container -->
+                    <div class="chart-container">
+                        <canvas id="genreChart"></canvas>
+                        <canvas id="ageChart" style="display: none;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Writing samples section -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Writing Samples</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Assignment</th>
+                                    <th>Writing Age</th>
+                                    <th class="text-center">Details</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if writing_samples %}
+                                    {% for sample in writing_samples %}
+                                        <tr>
+                                            <td>{{ sample.created_at.strftime('%d/%m/%Y') }}</td>
+                                            <td>
+                                                {% if sample.assignment %}
+                                                    {{ sample.assignment.title }}
+                                                {% else %}
+                                                    <span class="text-muted">No assignment</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ sample.writing_age }}</td>
+                                            <td class="text-center">
+                                                <button class="btn btn-sm btn-outline-primary toggle-details" 
+                                                        data-sample-id="{{ sample.id }}">
+                                                    <i class="fas fa-chevron-down"></i>
+                                                </button>
+                                            </td>
+                                            <td class="text-center">
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-secondary dropdown-toggle" 
+                                                            type="button" 
+                                                            id="actionDropdown{{ sample.id }}" 
+                                                            data-bs-toggle="dropdown" 
+                                                            aria-expanded="false">
+                                                        Actions
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end" 
+                                                        aria-labelledby="actionDropdown{{ sample.id }}">
+                                                        <li>
+                                                            <a class="dropdown-item" href="#" 
+                                                               onclick="printWritingReport({{ sample.id }})">
+                                                                <i class="fas fa-print me-2"></i> Print Report
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item" href="#" 
+                                                               onclick="updateFilename({{ sample.id }})">
+                                                                <i class="fas fa-edit me-2"></i> Rename
+                                                            </a>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                        <li>
+                                                            <a class="dropdown-item text-danger" href="#" 
+                                                               onclick="deleteWritingSample({{ sample.id }})">
+                                                                <i class="fas fa-trash-alt me-2"></i> Delete
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr id="details-{{ sample.id }}" class="details-row d-none">
+                                            <td colspan="5" class="p-0">
+                                                <div class="p-3 bg-light">
+                                                    <div class="row">
+                                                        <div class="col-md-12 mb-3">
+                                                            <h5 class="mb-3">Sample: {{ sample.filename }}</h5>
+                                                            <div class="mb-2 d-flex">
+                                                                <button class="btn btn-sm btn-outline-primary toggle-highlight-mode me-2" 
+                                                                        data-apply-ai-highlights="true">
+                                                                    <i class="fas fa-highlighter me-1"></i> Show Criteria Marking
+                                                                </button>
+                                                            </div>
+                                                            <div class="card">
+                                                                <div class="card-body">
+                                                                    <p id="text-{{ sample.id }}" class="text-content mb-0">{{ sample.text_content|nl2br|safe }}</p>
+                                                                </div>
+                                                            </div>
+                                                            <div id="feedback-{{ sample.id }}" class="d-none">{{ sample.feedback }}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row">
+                                                        <div class="col-md-6">
+                                                            <h6>Strengths</h6>
+                                                            <ul id="strengths-list-{{ sample.id }}" class="list-group"></ul>
+                                                        </div>
+                                                        <div class="col-md-6">
+                                                            <h6>Areas for Development</h6>
+                                                            <ul id="development-list-{{ sample.id }}" class="list-group"></ul>
+                                                        </div>
+                                                    </div>
+                                                    {% if sample.criteria_marks %}
+                                                    <div class="row mt-4">
+                                                        <div class="col-md-12">
+                                                            <h6>Assessment Criteria</h6>
+                                                            <div class="criteria-grid">
+                                                                {% for mark in sample.criteria_marks %}
+                                                                    <div class="criteria-box score-{{ mark.score }}">
+                                                                        <p class="criteria-text">{{ mark.criteria.description }}</p>
+                                                                        <div class="score-indicator">
+                                                                            <span class="score-text">
+                                                                                {% if mark.score == 0 %}
+                                                                                    Not yet demonstrated
+                                                                                {% elif mark.score == 1 %}
+                                                                                    Partially demonstrated
+                                                                                {% elif mark.score == 2 %}
+                                                                                    Confidently demonstrated
+                                                                                {% endif %}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                {% endfor %}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center py-3">
+                                            <div class="alert alert-info mb-0">
+                                                <i class="fas fa-info-circle me-2"></i>
+                                                No writing samples available for this student.
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation buttons -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            {% if prev_student %}
+                                <a href="{{ url_for('student_portfolio', student_id=prev_student.id) }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-arrow-left"></i> Previous Student
+                                </a>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <a href="{{ url_for('add_writing') }}?student_id={{ student.id }}" class="btn btn-success">
+                                <i class="fas fa-plus"></i> Add Writing Sample
+                            </a>
+                        </div>
+                        <div>
+                            {% if next_student %}
+                                <a href="{{ url_for('student_portfolio', student_id=next_student.id) }}" class="btn btn-outline-primary">
+                                    Next Student <i class="fas fa-arrow-right"></i>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student management buttons -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="mb-3">Student Management</h5>
+                    <div class="d-flex">
+                        <a href="{{ url_for('delete_student', student_id=student.id) }}" class="btn btn-danger">Delete Student</a>
+                    </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/portfolio_collapsible.js') }}"></script>
+<script src="{{ url_for('static', filename='js/portfolio_highlighting.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Chart toggle functionality
+    const genreChartBtn = document.getElementById('genreChartBtn');
+    const ageChartBtn = document.getElementById('ageChartBtn');
+    const genreChart = document.getElementById('genreChart');
+    const ageChart = document.getElementById('ageChart');
+    
+    genreChartBtn.addEventListener('click', function() {
+        genreChart.style.display = 'block';
+        ageChart.style.display = 'none';
+        genreChartBtn.classList.add('active');
+        ageChartBtn.classList.remove('active');
+    });
+    
+    ageChartBtn.addEventListener('click', function() {
+        genreChart.style.display = 'none';
+        ageChart.style.display = 'block';
+        genreChartBtn.classList.remove('active');
+        ageChartBtn.classList.add('active');
+    });
+    
+    // Generate the marks by genre chart
+    const genreCtx = document.getElementById('genreChart').getContext('2d');
+    new Chart(genreCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ genre_labels|tojson }},
+            datasets: [{
+                label: 'Criteria Met (%)',
+                data: {{ genre_percentages|tojson }},
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.5)',
+                    'rgba(54, 162, 235, 0.5)',
+                    'rgba(255, 206, 86, 0.5)',
+                    'rgba(75, 192, 192, 0.5)',
+                    'rgba(153, 102, 255, 0.5)',
+                    'rgba(255, 159, 64, 0.5)',
+                    'rgba(199, 199, 199, 0.5)'
+                ],
+                borderColor: [
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)',
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(153, 102, 255, 1)',
+                    'rgba(255, 159, 64, 1)',
+                    'rgba(199, 199, 199, 1)'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Criteria Met (%)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Genre'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Performance by Genre',
+                    font: {
+                        size: 16
+                    }
+                },
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+    
+    // Generate the age comparison chart
+    const ageCtx = document.getElementById('ageChart').getContext('2d');
+    new Chart(ageCtx, {
+        type: 'line',
+        data: {
+            labels: {{ age_dates|tojson }},
+            datasets: [{
+                label: 'Writing Age',
+                data: {{ age_values|tojson }},
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Writing Age'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Date'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Writing Age Progress',
+                    font: {
+                        size: 16
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        title: function(tooltipItems) {
+                            const item = tooltipItems[0];
+                            return {{ age_dates|tojson }}[item.dataIndex];
+                        },
+                        label: function(context) {
+                            return 'Writing Age: ' + context.parsed.y;
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Setup the update filename functionality
+    window.updateFilename = function(id) {
+        const newFilename = prompt('Enter a new filename for this writing sample:');
+        if (newFilename && newFilename.trim() !== '') {
+            fetch(`/writing/${id}/filename`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ filename: newFilename })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Reload the page to show the updated filename
+                    location.reload();
+                } else {
+                    alert('Failed to update the filename.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating the filename.');
+            });
+        }
+    };
+    
+    // Setup the delete writing sample functionality
+    window.deleteWritingSample = function(id) {
+        if (confirm('Are you sure you want to delete this writing sample? This action cannot be undone.')) {
+            fetch(`/writing/${id}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Reload the page to show the updated list
+                    location.reload();
+                } else {
+                    alert('Error deleting the writing sample.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while trying to delete the writing sample.');
+            });
+        }
+    }
+
+// Function to print writing report
+function printWritingReport(id) {
+    window.open(`/writing/${id}/print`, '_blank');
+}
+</script>
+{% endblock %}

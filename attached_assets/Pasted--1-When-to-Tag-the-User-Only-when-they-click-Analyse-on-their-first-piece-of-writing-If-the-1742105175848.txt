@@ -1,0 +1,76 @@
+🔹 1. When to Tag the User
+✅ Only when they click "Analyse" on their first piece of writing
+✅ If they’ve already been tagged, do nothing
+
+🔹 2. Updated Python Code for Replit
+(This will tag them the first time they click "Analyse")
+
+python
+Copy
+Edit
+import requests
+
+# Mailchimp API Config
+MAILCHIMP_API_KEY = "your-mailchimp-api-key"
+MAILCHIMP_DC = "usX"  # e.g., us21, us10, etc.
+MAILCHIMP_LIST_ID = "your-audience-id"
+
+def tag_user_first_analysis(email):
+    """ Tags the user in Mailchimp when they hit 'Analyse' for the first time """
+    
+    url = f"https://{MAILCHIMP_DC}.api.mailchimp.com/3.0/lists/{MAILCHIMP_LIST_ID}/members"
+    headers = {"Authorization": f"Bearer {MAILCHIMP_API_KEY}", "Content-Type": "application/json"}
+
+    # 1️⃣ Check if the user exists in Mailchimp
+    response = requests.get(f"{url}/search-members?query={email}", headers=headers)
+    user_data = response.json()
+    
+    if user_data['exact_matches']['total_items'] > 0:
+        user_id = user_data['exact_matches']['members'][0]['id']
+        
+        # 2️⃣ Add "First Analysis Done" tag
+        tag_url = f"{url}/{user_id}/tags"
+        tag_data = {"tags": [{"name": "First Analysis Done", "status": "active"}]}
+        requests.post(tag_url, json=tag_data, headers=headers)
+        
+        print("Tag added: First Analysis Done")
+    else:
+        print("User not found in Mailchimp.")
+
+# ✅ Call this function ONLY when user clicks "Analyse"
+def on_user_click_analyse(user_email):
+    tag_user_first_analysis(user_email)
+🔹 3. How to Use This
+📌 In your Scribl backend, when a user clicks "Analyse" for the first time, trigger:
+
+python
+Copy
+Edit
+on_user_click_analyse("teacher@email.com")
+🔹 4. Mailchimp Automation
+Now in Mailchimp:
+📩 If tagged ("First Analysis Done") → Send: "Nice work! Here’s what’s next…"
+📩 If NOT tagged → Send: "Haven’t analysed yet? Let’s fix that."
+
+✅ Why This Works Perfectly
+
+Triggers only on the first "Analyse" click
+Prevents duplicate tagging
+No Zapier required—direct API call
+Would you like me to guide you through testing this in Replit? 🚀
+
+
+
+
+
+
+
+
+
+
+
+Search
+
+Reason
+
+ChatGP

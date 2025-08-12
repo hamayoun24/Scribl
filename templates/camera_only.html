@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Take Photo - Scribl</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            background-color: #f9f9f9;
+            padding: 20px;
+        }
+        .camera-container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #preview-container {
+            text-align: center;
+            margin: 1rem 0;
+            position: relative;
+        }
+        #image-preview {
+            max-width: 100%;
+            max-height: 600px;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+        }
+        .btn-primary {
+            background-color: #3E5D58;
+            border-color: #3E5D58;
+        }
+        .btn-success {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="camera-container">
+            <h2 class="text-center mb-4">Take Photo</h2>
+            
+            <form id="writingForm" action="/process_image" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="student_id" value="{{ student_id }}">
+                <input type="hidden" name="assignment_id" value="{{ assignment_id }}">
+                
+                <div class="d-grid mb-3">
+                    <button type="button" class="btn btn-primary btn-lg" id="add-image-btn">
+                        <i class="fa fa-camera me-2"></i>Take Photo
+                    </button>
+                </div>
+
+                <!-- Hidden file input explicitly for camera capture -->
+                <input type="file" 
+                       class="d-none" 
+                       id="image-upload" 
+                       accept="image/*" 
+                       capture="environment" 
+                       multiple>
+
+                <!-- Image preview -->
+                <div id="preview-container" class="d-none mb-3">
+                    <img id="image-preview" class="img-fluid rounded mb-3" alt="Preview">
+                </div>
+
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between align-items-center gap-3">
+                        <button type="button" class="btn btn-outline-primary" id="add-more-btn">
+                            <i class="fa fa-plus me-2"></i>Add Another Photo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Submit button -->
+                <div class="d-grid mt-3">
+                    <button type="submit" class="btn btn-success btn-lg" disabled>
+                        <i class="fa fa-check me-2"></i>Process Photos
+                    </button>
+                </div>
+            </form>
+            
+            <div class="text-center mt-4">
+                <a href="/add_writing" class="btn btn-outline-secondary">
+                    <i class="fa fa-arrow-left me-2"></i>Back to Normal Upload
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("📸 CAMERA ONLY VERSION LOADED - v1.1");
+
+        // Cache DOM elements
+        const form = document.getElementById('writingForm');
+        const addImageBtn = document.getElementById('add-image-btn');
+        const imageUpload = document.getElementById('image-upload');
+        const previewContainer = document.getElementById('preview-container');
+        const imagePreview = document.getElementById('image-preview');
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const addMoreBtn = document.getElementById('add-more-btn');
+
+        // State variables
+        let imageFiles = [];
+        let currentImageIndex = 0;
+
+        // Helper functions
+        function showNotification(message) {
+            console.log("NOTIFICATION:", message);
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            form.insertBefore(alertDiv, form.firstChild);
+            setTimeout(() => alertDiv.remove(), 3000);
+        }
+
+        function updateUIAfterImageCapture() {
+            if (imageFiles.length > 0) {
+                previewContainer.classList.remove('d-none');
+                submitBtn.disabled = false;
+            } else {
+                previewContainer.classList.add('d-none');
+                submitBtn.disabled = true;
+            }
+        }
+
+        // Direct camera trigger
+        function triggerCamera() {
+            console.log("Opening camera...");
+            imageUpload.value = '';
+            
+            // Use setTimeout to ensure the click event is processed properly
+            setTimeout(() => {
+                try {
+                    console.log("Camera dialog triggered");
+                    imageUpload.click();
+                } catch (error) {
+                    console.error("Error triggering camera:", error);
+                }
+            }, 100);
+        }
+
+        // Event Listeners
+        if (addImageBtn) {
+            addImageBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log("Add image button clicked");
+                triggerCamera();
+            });
+        }
+
+        if (addMoreBtn) {
+            addMoreBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log("Add more button clicked");
+                triggerCamera();
+            });
+        }
+
+        if (imageUpload) {
+            imageUpload.addEventListener('change', function(e) {
+                if (e.target.files && e.target.files.length > 0) {
+                    console.log("Camera capture - files count:", e.target.files.length);
+                    
+                    try {
+                        // Process each file
+                        Array.from(e.target.files).forEach(file => {
+                            console.log("Processing file:", file.name);
+                            try {
+                                const imageUrl = URL.createObjectURL(file);
+                                console.log("URL created successfully:", imageUrl.substring(0, 30) + "...");
+                                
+                                imageFiles.push({
+                                    file: file,
+                                    url: imageUrl
+                                });
+                            } catch (err) {
+                                console.error("Error creating URL for file:", err);
+                            }
+                        });
+                        
+                        // Update current index to show latest image
+                        currentImageIndex = imageFiles.length - 1;
+                        console.log("Current image index set to:", currentImageIndex);
+                        
+                        // Update preview
+                        if (imagePreview && imageFiles[currentImageIndex]) {
+                            console.log("Setting image preview src");
+                            imagePreview.src = imageFiles[currentImageIndex].url;
+                        }
+                        
+                        // Show notification
+                        showNotification(`${e.target.files.length} image(s) added successfully!`);
+                        console.log("Notification shown");
+                        
+                        // Update UI
+                        updateUIAfterImageCapture();
+                    } catch (error) {
+                        console.error("Error processing images:", error);
+                    }
+                }
+            });
+        }
+
+        // Form submission
+        if (form) {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+
+                if (imageFiles.length === 0) {
+                    showNotification('Please take at least one photo.');
+                    return;
+                }
+
+                const formData = new FormData();
+                imageFiles.forEach((imageData) => {
+                    formData.append('image', imageData.file);
+                });
+
+                // Add hidden form values
+                const studentIdInput = document.querySelector('input[name="student_id"]');
+                const assignmentIdInput = document.querySelector('input[name="assignment_id"]');
+
+                if (studentIdInput.value) {
+                    formData.append('student_id', studentIdInput.value);
+                }
+
+                if (assignmentIdInput.value) {
+                    formData.append('assignment_id', assignmentIdInput.value);
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa fa-spinner fa-spin me-2"></i>Processing...';
+
+                try {
+                    const response = await fetch('/process_image', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        showNotification('Images processed successfully!');
+                        imageFiles = [];
+                        currentImageIndex = 0;
+                        updateUIAfterImageCapture();
+                        window.location.href = `/writing/${result.writing_id}`;
+                    } else {
+                        showNotification(result.error || 'Failed to process images.');
+                    }
+                } catch (error) {
+                    showNotification('An error occurred while processing the images.');
+                    console.error('Upload error:', error);
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fa fa-check me-2"></i>Process Photos';
+                }
+            });
+        }
+
+        // Log that setup is complete
+        console.log("📸 Camera setup complete - SIMPLIFIED VERSION 1.1");
+        
+        // Auto-trigger the camera button click on mobile devices
+        if(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            console.log("📱 Mobile device detected - auto-triggering camera");
+            setTimeout(() => {
+                if (addImageBtn) addImageBtn.click();
+            }, 500);
+        }
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Writing Assessment Report - {{ student.name }}</title>
+    <style>
+        @page {
+            size: A5;
+            margin: 0.8cm;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            color: #333;
+            margin: 0 auto;
+            padding: 0;
+            height: 100%;
+            overflow-wrap: break-word;
+        }
+        .report-container {
+            border: 1px solid #ccc;
+            padding: 0.8cm;
+            box-sizing: border-box;
+            background-color: white;
+            max-height: 100%;
+            overflow: hidden;
+            zoom: 1;
+        }
+        .report-header {
+            margin-bottom: 10px;
+            border-bottom: 2px solid #198754;
+            padding-bottom: 5px;
+        }
+        .logo {
+            max-height: 30px;
+            margin-bottom: 5px;
+        }
+        h1 {
+            color: #198754;
+            font-size: 14pt;
+            margin: 0 0 5px 0;
+        }
+        h2 {
+            color: #198754;
+            font-size: 12pt;
+            margin: 10px 0 5px 0;
+        }
+        h3 {
+            color: #198754;
+            font-size: 11pt;
+            margin: 10px 0 5px 0;
+        }
+        .student-info {
+            margin-bottom: 10px;
+        }
+        .student-info p {
+            margin: 2px 0;
+        }
+        .marks-summary {
+            margin: 10px 0;
+            padding: 5px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .percentage {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #198754;
+            margin-right: 10px;
+        }
+        .criteria-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 9pt;
+        }
+        .criteria-table th, .criteria-table td {
+            border: 1px solid #ddd;
+            padding: 4px 6px;
+            text-align: left;
+        }
+        .criteria-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .score-0 {
+            color: #dc3545;
+        }
+        .score-1 {
+            color: #ffc107;
+        }
+        .score-2 {
+            color: #198754;
+        }
+        .feedback-section {
+            margin: 10px 0;
+            padding: 8px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            font-size: 9pt;
+        }
+        .strengths {
+            border-left: 3px solid #198754;
+            padding-left: 8px;
+            margin-bottom: 8px;
+        }
+        .development {
+            border-left: 3px solid #ffc107;
+            padding-left: 8px;
+        }
+        ul {
+            margin: 4px 0;
+            padding-left: 15px;
+        }
+        li {
+            margin-bottom: 2px;
+        }
+        .footer {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 8pt;
+            color: #666;
+            padding-top: 5px;
+            border-top: 1px solid #ddd;
+        }
+        .print-instructions {
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin: 20px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .print-instructions p {
+            margin: 0;
+        }
+        .print-button {
+            background-color: #198754;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin-left: 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* Add to existing styles */
+        .criteria-feedback {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .criteria-item {
+            margin-bottom: 15px;
+            padding: 8px;
+            border-left: 3px solid #ddd;
+        }
+
+        .criteria-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .text-success .score {
+            color: #198754;
+        }
+
+        .text-warning .score {
+            color: #ffc107;
+        }
+
+        .text-danger .score {
+            color: #dc3545;
+        }
+
+        .criteria-justification {
+            font-size: 0.9em;
+            margin: 0;
+            color: #666;
+        }
+
+        .criteria-linked-header {
+            color: #198754;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #198754;
+            padding-bottom: 5px;
+        }
+
+        .strengths-development {
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 15px;
+        }
+
+        .strengths, .development {
+            margin-bottom: 15px;
+        }
+
+        .strengths ul, .development ul {
+            margin-top: 8px;
+        }
+        @media print {
+            .print-instructions {
+                display: none;
+            }
+            .report-container {
+                border: none;
+                padding: 0;
+            }
+            body {
+                font-size: 11pt;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-instructions">
+        <p>Print this page as A5 size to create a perfectly sized report slip for student books.</p>
+        <button class="print-button" onclick="window.print()">Print Report</button>
+    </div>
+
+    <script>
+        // Auto-scale content based on number of criteria
+        window.onload = function() {
+            const container = document.querySelector('.report-container');
+            const criteriaRows = document.querySelectorAll('.criteria-table tr').length;
+
+            // Adjust font size based on content amount
+            if (criteriaRows > 8) {
+                document.body.style.fontSize = '9pt';
+                document.querySelectorAll('.criteria-table th, .criteria-table td').forEach(el => {
+                    el.style.padding = '2px 4px';
+                });
+            } else if (criteriaRows > 5) {
+                document.body.style.fontSize = '9.5pt';
+            }
+
+            // Check if content overflows and reduce spacing if needed
+            if (container.scrollHeight > container.clientHeight) {
+                document.querySelectorAll('p, h1, h2, h3, .marks-summary, .feedback-section').forEach(el => {
+                    const currentMargin = parseInt(window.getComputedStyle(el).marginBottom);
+                    el.style.marginBottom = Math.max(currentMargin - 2, 2) + 'px';
+                });
+            }
+        };
+    </script>
+
+    <div class="report-container">
+        <div class="report-header">
+            <h1>Writing Assessment Report</h1>
+            <p>Date: {{ writing.created_at.strftime('%d %B %Y') }}</p>
+        </div>
+
+        <div class="student-info">
+            <h2>{{ student.name }}</h2>
+            <p>Class: {{ student.class_group.name }} ({{ student.class_group.year_group }})</p>
+            <p>Assignment: {% if writing.assignment %}{{ writing.assignment.title }}{% else %}Free Writing{% endif %}</p>
+            <p>Age: {{ student_age }} | Writing Age: {{ writing_age }}</p>
+        </div>
+
+        {% if writing.assignment %}
+        <div class="marks-summary">
+            <div class="percentage">{{ percentage }}%</div>
+            <div>
+                <p style="margin: 0">Overall Achievement</p>
+                <p style="margin: 0">{{ achieved_marks }}/{{ total_marks }} marks</p>
+            </div>
+        </div>
+
+        <h3>Success Criteria Assessment</h3>
+        <table class="criteria-table">
+            <thead>
+                <tr>
+                    <th>Success Criteria</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mark in writing.criteria_marks %}
+                <tr>
+                    <td>{{ mark.criteria.description }}</td>
+                    <td class="score-{{ mark.score }}">
+                        {{ mark.score }}/2
+                        {% if mark.score == 0 %}
+                        (Not met)
+                        {% elif mark.score == 1 %}
+                        (Partially met)
+                        {% else %}
+                        (Confidently used)
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        <h3>Feedback</h3>
+        <div class="feedback-section">
+            {% if writing.assignment %}
+            <div class="criteria-feedback">
+                <h4>Performance Analysis:</h4>
+                {% for mark in writing.criteria_marks|sort(attribute='score', reverse=true) %}
+                <div class="criteria-item">
+                    <div class="criteria-header {% if mark.score == 2 %}text-success{% elif mark.score == 1 %}text-warning{% else %}text-danger{% endif %}">
+                        <strong>{{ mark.criteria.description }}</strong>
+                        <span class="score">
+                            {{ mark.score }}/2
+                            {% if mark.score == 2 %}
+                            (Confidently used)
+                            {% elif mark.score == 1 %}
+                            (Partially met)
+                            {% else %}
+                            (Not met)
+                            {% endif %}
+                        </span>
+                    </div>
+                    <p class="criteria-justification">{{ mark.justification }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="alert bg-white text-dark border mb-0">
+                {{ writing.feedback|safe }}
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Generated by Scribl | {{ writing.created_at.strftime('%d %B %Y at %H:%M') }}</p>
+        </div>
+    </div>
+</body>
+</html>

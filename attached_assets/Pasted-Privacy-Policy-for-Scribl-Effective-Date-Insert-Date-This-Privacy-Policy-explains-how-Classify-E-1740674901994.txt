@@ -1,0 +1,42 @@
+Privacy Policy for Scribl
+Effective Date: [Insert Date]
+
+This Privacy Policy explains how Classify Education Services FZCO ("we", "us", "our") manages information on the Scribl website and web application (collectively, the "Site"). Your privacy is important to us, and this policy outlines our practices regarding the collection, use, and storage of your personal data.
+
+1. Information Collection
+Minimal Personal Data for Account Access
+Account Creation and Login:
+To support account creation, login, and user authentication, we require you to provide minimal personal information, including your name and email address.
+Purpose:
+This information is used solely for verifying your identity, managing your account, and providing you access to the services offered by Scribl.
+No Additional Data:
+Aside from this basic account information, Scribl does not intentionally collect or store any further personal data from users.
+2. Data Storage and Processing
+Personal Data:
+The name and email address you provide are stored securely for the purpose of account management and authentication.
+Non-Personal Data:
+Any data submitted through the writing assessment features (such as writing samples) is processed in real-time for analysis and is not retained beyond what is necessary for providing the service.
+Server Logs:
+Standard server logs (e.g., IP addresses, access times) may be maintained by our hosting provider, SiteGround, for maintenance, security, and performance purposes. These logs are not used to identify individual users.
+3. Cookies and Tracking
+Limited Use of Cookies:
+Scribl may use minimal cookies for essential session management (e.g., keeping you logged in) and to enhance the user experience. We do not use cookies for tracking or marketing purposes.
+No Additional Tracking Technologies:
+The Site does not employ additional tracking pixels or similar technologies to collect personal data.
+4. Third-Party Hosting
+Hosted on SiteGround:
+Scribl is hosted on SiteGround. While we take care not to collect or store unnecessary personal data, SiteGround may automatically log technical information (such as IP addresses and access times) as part of their standard operations. We do not have access to these logs, and they are governed by SiteGround's own privacy policy.
+
+5. Security
+Data Protection:
+We employ industry-standard security measures to protect the personal data stored for account management. However, no method of transmission over the internet or electronic storage is 100% secure.
+Limited Risk:
+Because we only store minimal personal data necessary for login purposes, the risk to your privacy is minimized.
+6. Changes to This Privacy Policy
+We may update this Privacy Policy from time to time. Any changes will be posted on this page with an updated effective date. Your continued use of Scribl after any such changes constitutes your acceptance of the updated Privacy Policy.
+
+7. Contact Information
+If you have any questions or concerns about this Privacy Policy, please contact us at:
+
+Email: [Your Contact Email]
+Address: [Your Company Address, UAE]

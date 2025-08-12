@@ -1,0 +1,85 @@
+1. Definitions
+1.1 "Personal Data" means any information relating to an identified or identifiable natural person, including but not limited to names, email addresses, and any other data provided by the Data Controller or collected through the use of Scribl.
+
+1.2 "Processing" means any operation or set of operations which is performed on Personal Data, whether or not by automated means, such as collection, recording, organization, structuring, storage, adaptation, alteration, retrieval, consultation, use, disclosure, erasure, or destruction.
+
+1.3 "Service" refers to the Scribl web application provided by the Data Processor.
+
+1.4 "Subprocessor" means any third party engaged by the Data Processor to assist in the processing of Personal Data.
+
+2. Scope and Purpose of Data Processing
+2.1 The Data Processor shall Process Personal Data solely for the purpose of providing the Scribl service to the Data Controller, including, but not limited to:
+
+Account creation, authentication, and login support (processing minimal personal data such as name and email address).
+Processing of writing samples and assessment data for AI-driven feedback, success criteria analysis, and writing age estimation.
+Logging of technical data by our hosting provider, SiteGround, for maintenance, security, and performance purposes.
+2.2 The Data Processor shall process Personal Data only in accordance with the documented instructions of the Data Controller, as set forth in this DPA and any additional written instructions agreed upon by the Parties.
+
+3. Data Processing Details
+3.1 Duration:
+The Processing shall continue for as long as the Data Controller uses the Service and until such time as the Data Controller requests deletion of its Personal Data.
+
+3.2 Types of Data:
+
+Personal Data: Name, email address, and any other data provided during account registration.
+Non-Personal Data: Writing samples, assessment inputs, and analysis outputs, which are processed in real time and not retained longer than necessary for service delivery.
+Technical Data: Standard server logs (e.g., IP addresses, access timestamps) maintained by SiteGround.
+3.3 Categories of Data Subjects:
+Users of the Scribl Service (primarily educators and educational professionals).
+
+4. Obligations of the Data Processor
+4.1 The Data Processor shall:
+
+Process Personal Data only on the instructions of the Data Controller.
+Implement and maintain appropriate technical and organizational measures to protect Personal Data against unauthorized or unlawful processing, accidental loss, destruction, or damage.
+Ensure that any person authorized to process Personal Data is bound by confidentiality obligations.
+Assist the Data Controller in ensuring compliance with obligations regarding the security of Personal Data, data breach notifications, and data subject rights.
+Notify the Data Controller without undue delay upon becoming aware of any Personal Data breach.
+Only engage Subprocessors that provide sufficient guarantees regarding the implementation of appropriate technical and organizational measures.
+4.2 The Data Processor shall maintain complete and accurate records of its Processing activities under this DPA.
+
+5. Subprocessing
+5.1 The Data Processor may engage Subprocessors for the purpose of providing the Service.
+5.2 The Data Processor shall remain liable for any acts or omissions of its Subprocessors and shall ensure that each Subprocessor is bound by obligations no less protective than those contained in this DPA.
+
+6. Data Transfers
+6.1 Personal Data processed under this DPA shall be stored and processed within the United Arab Emirates.
+6.2 Any transfer of Personal Data outside the UAE shall be conducted only if appropriate safeguards are in place in compliance with applicable law.
+
+7. Security Measures
+7.1 The Data Processor agrees to implement industry-standard technical and organizational measures to secure Personal Data.
+7.2 These measures include, but are not limited to:
+
+Encryption of data during transmission and at rest.
+Access controls and authentication mechanisms.
+Regular security assessments and monitoring.
+8. Data Subject Rights
+8.1 The Data Controller, and any data subjects, have the right to:
+
+Access the Personal Data processed on their behalf.
+Request correction or deletion of Personal Data.
+Object to or restrict the Processing of their Personal Data.
+Request data portability where applicable.
+8.2 The Data Processor shall promptly assist the Data Controller in fulfilling such requests, provided that the request is in accordance with applicable UAE law.
+
+9. Audit and Inspection
+The Data Controller has the right to request documentation or audits from the Data Processor to verify compliance with this DPA, subject to reasonable notice and during normal business hours.
+
+10. Liability and Indemnification
+10.1 Each Party’s liability under this DPA shall be subject to the limitations of their respective agreements and applicable law.
+10.2 The Data Processor shall indemnify and hold harmless the Data Controller against any claims arising from the Data Processor’s breach of this DPA, except to the extent such claims result from the Data Controller’s instructions or actions.
+
+11. Term and Termination
+11.1 This DPA shall remain in effect for the duration of the Service agreement between the Parties.
+11.2 Upon termination of the Service, the Data Processor shall, at the choice of the Data Controller, delete or return all Personal Data processed under this DPA, unless retention is required by applicable law.
+
+12. Governing Law and Jurisdiction
+This DPA shall be governed by and construed in accordance with the laws of the United Arab Emirates. Any disputes arising from this DPA shall be subject to the exclusive jurisdiction of the UAE courts.
+
+13. Contact Information
+For any questions or concerns regarding this Data Processing Agreement, please contact:
+
+Classify Education Services FZCO
+Email: [Your Contact Email]
+Address: [Your Company Address, UAE]
+

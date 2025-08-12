@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Data Analysis - Text Analysis{% endblock %}
+
+{% block extra_head %}
+<style>
+    .student-selector {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        padding: 10px;
+    }
+    
+    .chart-container {
+        position: relative;
+        margin: auto;
+        height: 400px;
+        width: 100%;
+    }
+    
+    .chart-filters {
+        background-color: rgba(0,0,0,0.03);
+        padding: 15px;
+        border-radius: 0.25rem;
+        margin-bottom: 20px;
+    }
+    
+    .student-checkbox {
+        margin-right: 8px;
+    }
+    
+    .color-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    .filter-section {
+        margin-bottom: 15px;
+    }
+    
+    .filter-label {
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+    
+    .student-item {
+        padding: 6px 10px;
+        border-radius: 4px;
+    }
+    
+    .student-item:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-12">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="card-title h5 mb-0">Data Analysis Dashboard</h2>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="chart-filters">
+                                <div class="filter-section">
+                                    <div class="filter-label">Chart Type</div>
+                                    <select id="chartTypeSelector" class="form-select form-select-sm">
+                                        <option value="writing_scores">Writing Scores</option>
+                                        <option value="writing_age">Writing Age</option>
+                                        <option value="age_difference">Age Difference</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="filter-section">
+                                    <div class="filter-label">Class</div>
+                                    <select id="classSelector" class="form-select form-select-sm">
+                                        <option value="all">All Classes</option>
+                                        {% for class in classes %}
+                                        <option value="{{ class.id }}">{{ class.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                
+                                <div class="filter-section">
+                                    <div class="filter-label">Time Period</div>
+                                    <select id="timePeriodSelector" class="form-select form-select-sm">
+                                        <option value="all">All Time</option>
+                                        <option value="month">Last Month</option>
+                                        <option value="quarter">Last Quarter</option>
+                                        <option value="year">Last Year</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="filter-section">
+                                    <div class="filter-label">Class Average Options</div>
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="showClassAverageToggle">
+                                        <label class="form-check-label" for="showClassAverageToggle">Show class average</label>
+                                    </div>
+                                    <select id="averageTypeSelector" class="form-select form-select-sm" disabled>
+                                        <option value="all">All Writing Samples</option>
+                                        <option value="by_assignment">By Assignment Type</option>
+                                    </select>
+                                </div>
+                                
+                                <hr>
+                                
+                                <div class="filter-section">
+                                    <div class="filter-label">Select Students</div>
+                                    <div class="d-flex mb-2">
+                                        <button id="selectAllStudents" class="btn btn-sm btn-outline-primary me-2">Select All</button>
+                                        <button id="deselectAllStudents" class="btn btn-sm btn-outline-secondary">Deselect All</button>
+                                    </div>
+                                    <div class="student-selector" id="studentSelector">
+                                        <div class="alert alert-info" id="noStudentsMessage" style="display: none;">
+                                            No students available for the selected class.
+                                        </div>
+                                        <!-- Student checkboxes will be populated here by JavaScript -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-9">
+                            <div class="chart-container">
+                                <canvas id="dataChart"></canvas>
+                            </div>
+                            <div class="alert alert-info mt-3" id="noDataMessage" style="display: none;">
+                                No data available for the selected criteria. Try changing your filters or selecting different students.
+                            </div>
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Data Insights</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="dataInsights">
+                                        <p>Select students and chart options to view insights.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{{ url_for('static', filename='js/data_analysis.js') }}?v={{ now }}"></script>
+{% endblock %}

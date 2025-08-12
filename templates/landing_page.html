@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+    <title>Scribl - Educational Text Analysis Platform</title>
+    <!-- Add Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://api.fontshare.com/v2/css?f[]=satoshi@1,900,700,500,301,701,300,501,401,901,400,2&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, rgba(43, 50, 255, 1) 0%, rgba(255, 62, 157, 1) 50%, rgba(255, 184, 48, 1) 100%);
+            --page-gradient: linear-gradient(135deg, rgba(43, 50, 255, 0.12) 0%, rgba(255, 62, 157, 0.08) 50%, rgba(255, 184, 48, 0.12) 100%);
+        }
+        /* Base Typography */
+        body {
+            font-family: 'Satoshi', sans-serif;
+            line-height: 1.6;
+            font-weight: 400;
+            -webkit-font-smoothing: antialiased;
+            padding-top: 0;
+            background: var(--page-gradient);
+            min-height: 100vh;
+            animation: gradientMovement 25s ease infinite alternate;
+            background-size: 400% 400%;
+            color: #374151;
+        }
+
+        @keyframes gradientMovement {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Comfortaa', sans-serif;
+            letter-spacing: -0.02em;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .display-4 {
+            font-family: 'Comfortaa', sans-serif;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.2;
+            font-size: 2.5rem;
+            color: #111827;
+        }
+
+        .lead {
+            font-family: 'Comfortaa', sans-serif;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            font-size: 1.1rem;
+            color: #4B5563;
+        }
+
+        /* Navigation */
+        .navbar {
+            transition: all 0.3s ease;
+            padding: 0.75rem 0;
+            position: fixed;
+            width: 100%;
+            z-index: 1000;
+            top: 1.5rem;
+        }
+
+        .navbar-container {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 50px;
+            border: 2px solid #2B32FF;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            margin: 0 auto;
+            width: 90%;
+            max-width: 1000px;
+            padding: 0.8rem 1.5rem;
+            text-align: center;
+        }
+
+        /* Scrolled state */
+        .navbar.scrolled {
+            top: 0.5rem;
+        }
+
+        .navbar.scrolled .navbar-container {
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+
+        .nav-links {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin: 0;
+            padding: 0;
+        }
+
+        .nav-link {
+            color: #4B5563 !important;
+            font-weight: 500;
+            transition: color 0.3s ease;
+            white-space: nowrap;
+            padding: 0.4rem 0.6rem;
+            border-radius: 0.5rem;
+        }
+
+        .nav-link:hover {
+            color: #66AD8D !important;
+            background-color: rgba(102, 173, 141, 0.1);
+        }
+
+        .btn-outline-success {
+            border-color: #3498db;
+            color: #3498db;
+            border-radius: 8px;
+            padding: 0.5rem 1.25rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-outline-success:hover {
+            background-color: #3498db;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .btn-gradient {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 1.25rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(43, 50, 255, 0.25);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-gradient:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 200%;
+            height: 100%;
+            background: var(--primary-gradient);
+            transition: transform 0.3s ease;
+            z-index: -1;
+        }
+
+        .btn-gradient:hover {
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(43, 50, 255, 0.3);
+        }
+
+        .btn-gradient:hover:before {
+            transform: translateX(-50%);
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                top: 0.5rem;
+            }
+
+            .navbar-container {
+                width: 95%;
+                border-radius: 16px;
+                padding: 0.6rem 1rem;
+            }
+
+            .nav-container {
+                padding: 0;
+            }
+
+            .nav-links {
+                gap: 0.5rem;
+            }
+
+            .nav-link {
+                font-size: 0.85rem;
+                padding: 0.3rem 0.5rem;
+            }
+
+            .btn-outline-success, .btn-gradient {
+                padding: 0.4rem 0.8rem;
+                font-size: 0.85rem;
+            }
+
+            .hero-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .hero-logo img {
+                max-width: 100%;
+                max-height: 200px;
+            }
+
+            .display-4 {
+                font-size: 1.8rem;
+            }
+
+            .lead {
+                font-size: 1rem;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                gap: 0.75rem;
+                align-items: center;
+            }
+
+            .hero-buttons .btn {
+                width: 100%;
+                max-width: 250px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .navbar-container {
+                width: 98%;
+                padding: 0.5rem 0.8rem;
+            }
+
+            .nav-links {
+                justify-content: center;
+                gap: 0.3rem;
+            }
+
+            .nav-link {
+                font-size: 0.8rem;
+                padding: 0.3rem 0.4rem;
+            }
+
+            .btn-outline-success, .btn-gradient {
+                padding: 0.3rem 0.6rem;
+                font-size: 0.8rem;
+            }
+        }
+
+        /* Hero Section */
+        .hero {
+            background: linear-gradient(170deg, rgba(102, 173, 141, 0.1) 0%, rgba(255, 255, 255, 0.5) 100%);
+            padding: 100px 0 80px;
+            position: relative;
+            border-bottom: none;
+        }
+
+        .hero .container {
+            max-width: 1400px;
+            padding: 0 40px;
+        }
+
+        @media (max-width: 768px) {
+            .hero .container {
+                padding: 0 20px;
+            }
+        }
+
+        /* Hero content is now always centered and stacked vertically */
+        .hero-content {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .hero-logo {
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .hero-logo img {
+            max-width: 400px;
+            height: auto;
+            margin: 0 auto;
+        }
+
+        .hero-content {
+            text-align: center;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .hero-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 2.5rem;
+        }
+
+        /* Feature Cards */
+        .feature-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 231, 235, 0.8);
+            border-radius: 16px;
+            padding: 2.5rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: rgba(102, 173, 141, 0.15);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Pricing Cards */
+        .pricing-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(229, 231, 235, 0.8);
+            border-radius: 16px;
+            padding: 2rem;
+            height: 100%;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        @media (max-width: 768px) {
+            .pricing-card {
+                padding: 1.5rem;
+                margin-bottom: 1rem;
+            }
+            .display-4 {
+                font-size: calc(1.8rem + 1.5vw);
+            }
+            .lead {
+                font-size: 1rem;
+            }
+            img {
+                max-width: 100%;
+                height: auto;
+            }
+        }
+
+        .pricing-card.highlighted {
+            border-color: rgba(102, 173, 141, 0.3);
+            position: relative;
+            box-shadow: 0 10px 25px rgba(102, 173, 141, 0.15);
+        }
+
+        /* Text Colors */
+        .section-title {
+            color: #111827;
+            margin-bottom: 1rem;
+            font-weight: 700;
+            font-size: 2rem;
+            letter-spacing: -0.03em;
+        }
+
+        .section-subtitle {
+            color: #6B7280;
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+        }
+
+        /* Section styling */
+        .section-spacing {
+            padding: 100px 0;
+        }
+
+        .section-gradient-light {
+            background: var(--page-gradient);
+        }
+
+        .section-gradient-dark {
+            background: var(--page-gradient);
+        }
+
+        /* Footer styling */
+        footer {
+            padding: 60px 0 30px;
+        }
+
+        /* Image styling */
+        .rounded-image {
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        /* List styling */
+        .modern-list {
+            list-style: none;
+            padding-left: 0.5rem;
+        }
+
+        .modern-list li {
+            margin-bottom: 0.75rem;
+            position: relative;
+            padding-left: 1.75rem;
+        }
+
+        .modern-list li i {
+            position: absolute;
+            left: 0;
+            top: 0.35rem;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        /* Form styling */
+        .modern-form input {
+            border-radius: 8px;
+            border: 1px solid #E5E7EB;
+            padding: 0.75rem 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .modern-form input:focus {
+            border-color: #66AD8D;
+            box-shadow: 0 0 0 3px rgba(102, 173, 141, 0.15);
+            outline: none;
+        }
+
+        /* Added Styles for Calculator and Pricing Sections */
+        .calculator-section {
+            background: linear-gradient(135deg, rgba(43, 50, 255, 0.12) 0%, rgba(255, 62, 157, 0.08) 50%, rgba(255, 184, 48, 0.12) 100%);
+        }
+        .pricing-section .pricing-card .btn-gradient, .calculator-section .btn-gradient {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 1.25rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(43, 50, 255, 0.25);
+            position: relative;
+            overflow: hidden;
+        }
+        .pricing-section .pricing-card .btn-gradient:before, .calculator-section .btn-gradient:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 200%;
+            height: 100%;
+            background: var(--primary-gradient);
+            transition: transform 0.3s ease;
+            z-index: -1;
+        }
+        .pricing-section .pricing-card .btn-gradient:hover, .calculator-section .btn-gradient:hover {
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(43, 50, 255, 0.3);
+        }
+        .pricing-section .pricing-card .btn-gradient:hover:before, .calculator-section .btn-gradient:hover:before {
+            transform: translateX(-50%);
+        }
+
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg">
+        <div class="navbar-container">
+            <div class="nav-container justify-content-center">
+                <div class="nav-links">
+                    <a class="nav-link" href="#features">Features</a>
+                    <a class="nav-link" href="#demo">Demo</a>
+                    <a class="nav-link" href="#calculator">Calculator</a>
+                    <a class="nav-link" href="#pricing">Pricing</a>
+                    <a class="nav-link" href="#about">About</a>
+                    <a href="{{ url_for('login') }}" class="btn btn-outline-success">Login</a>
+                    <a href="{{ url_for('signup') }}" class="btn btn-gradient">Sign Up</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="container">
+            <div class="text-center">
+                <div class="hero-logo mb-4">
+                    <img src="{{ url_for('static', filename='images/Logo Update.png') }}" 
+                         alt="Scribl Logo" 
+                         class="img-fluid mx-auto"
+                         style="max-width: 100%; height: auto; max-height: 300px; object-fit: contain;">
+                </div>
+                <div class="hero-content">
+                    <h1 class="display-4 mb-3">Writing Assessment Made Easy</h1>
+                    <p class="lead mb-4"> Augment your writing assessment and take back your time with the power of AI to assess, analyse and track student writing. Get instant insights and personalised feedback for every student. </p>
+                    <div class="hero-buttons">
+                        <a href="{{ url_for('signup') }}" class="btn btn-gradient btn-lg">Get Started Free</a>
+                        <a href="#features" class="btn btn-outline-success btn-lg">Learn More</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo" class="section-spacing section-gradient-light">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="section-title">See How Simple it is...</h2>
+                <p class="section-subtitle">Experience how Scribl transforms the assessment of writing</p>
+            </div>
+            <div class="row justify-content-center">
+                <div class="col-lg-10">
+                    <div class="feature-card">
+                        <div class="mb-4">
+                        <div>
+                          <script async src="https://js.storylane.io/js/v2/storylane.js"></script>
+                          <style>
+                            .sl-heading-text {
+                              max-width:53%;
+                            }
+                            @media (max-width: 1024px) {
+                              .sl-heading-text {
+                                max-width:90%;
+                              }
+                            }
+                          </style>
+                          <div class="sl-embed-container" style="position:relative;display:flex;align-items:center;justify-content:center;border: 1px solid rgba(63,95,172,0.35);box-shadow: 0px 0px 18px rgba(26, 19, 72, 0.15);border-radius:10px">
+                            <div class="sl-preview-heading" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background-color:transparent;z-index:999999;font-family:Poppins, Arial, sans-serif;font-size:clamp(20px, 2.664vw, 28px);font-weight:500;line-height:normal;text-align:center;border-radius:10px;">
+                              <button onclick="Storylane.Play({type: 'preview_embed',demo_type: 'image', width: 2186, height: 1056, element: this, demo_url: 'https://app.storylane.io/demo/jcgqrhxvneia?embed=inline_overlay'})" class="sl-preview-cta" style="background-color:#66AD8D;border:none;border-radius:8px;box-shadow:0px 0px 15px rgba(26, 19, 72, 0.45);color:#FFFFFF;display:inline-block;font-family:Poppins, Arial, sans-serif;font-size:clamp(16px, 1.599vw, 20px);font-weight:600;height:clamp(40px, 3.996vw, 50px);line-height:1.2;padding:0 clamp(15px, 1.776vw, 20px);text-overflow:ellipsis;transform:translateZ(0);transition:background 0.4s;white-space:nowrap;width:auto;z-index:999999;cursor:pointer">VIEW DEMO</button>
+                            </div>
+                            <div class="sl-embed" data-sl-demo-type="image" style="position:relative;padding-bottom:calc(48.31% + 25px);width:100%;height:0;transform:scale(1);overflow:hidden;">
+                              <div class="sl-preview" style="width:100%;height:100%;z-index:99999;position:absolute;background:url('https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_33212ea6-bbd8-46f5-9147-f9321c129f90/project/project_de86b121-b8db-42cc-b86c-9cc879f91aa3/page/page_6ec81275-fa92-4233-a1bf-84a805cc8ed4/crop/1-woRC9fwyOSxNbb3WqUd/1741182878368.png') no-repeat;background-size:100% 100%;border-radius:inherit;filter:blur(10px)"></div>
+                              <iframe class="sl-demo" src="" name="sl-embed" allow="fullscreen" allowfullscreen style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;"></iframe>
+                            </div>
+                            <iframe class="sl-demo" src="" name="sl-embed" allow="fullscreen" allowfullscreen style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;border:none;"></iframe>
+                          </div>
+                        </div>
+                    </div>
+                        <div class="text-center mt-4">
+                            <h4>Ready to take back your time?</h4>
+                            <div class="mt-3">
+                                <a href="{{ url_for('signup') }}" class="btn btn-gradient mx-2">Try Scribl Free</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="section-spacing section-gradient-light">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="section-title">How It Works</h2>
+                <p class="section-subtitle">Mark your writing assessments in three simple steps</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="feature-card text-center">
+                        <div class="feature-icon-circle mx-auto">
+                            <i class="fa fa-list-alt" style="color: white;"></i>
+                        </div>
+                        <h3 class="mb-3">1. Create Assignment</h3>
+                        <p>Create an assignment linked to your success criteria.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card text-center">
+                        <div class="feature-icon-circle mx-auto">
+                            <i class="fa fa-cloud-upload" style="color: white;"></i>
+                        </div>
+                        <h3 class="mb-3">2. Upload Photo</h3>
+                        <p>Take a photo or upload an image of student writing</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card text-center">
+                        <div class="feature-icon-circle mx-auto">
+                            <i class="fa fa-search" style="color: white;"></i>
+                        </div>
+                        <h3 class="mb-3">3. Review</h3>
+                        <p>Our AI instantly analyzes the writing for key criteria</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="section-spacing">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="section-title">Powerful Features</h2>
+                <p class="section-subtitle">Everything you need to assess student writing</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="feature-card text-center h-100">
+                        <h3 class="mb-4">AI Analysis</h3>
+                        <div class="rounded-image mb-4" style="height: 200px; overflow: hidden;">
+                            <img src="{{ url_for('static', filename='images/features/ai-analysis.png') }}" 
+                                 alt="AI Analysis" 
+                                 class="img-fluid w-100 h-100"
+                                 style="object-fit: cover;">
+                        </div>
+                        <p>Get instant insights into writing style, structure, and complexity using advanced AI algorithms.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card text-center h-100">
+                        <h3 class="mb-4">Progress Tracking</h3>
+                        <div class="rounded-image mb-4" style="height: 200px; overflow: hidden;">
+                            <img src="{{ url_for('static', filename='images/features/progress-tracking.png') }}" 
+                                 alt="Progress Tracking" 
+                                 class="img-fluid w-100 h-100"
+                                 style="object-fit: cover;">
+                        </div>
+                        <p>Monitor student growth over time with detailed and clean analytics and progress reports.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card text-center h-100">
+                        <h3 class="mb-4">Smart Feedback</h3>
+                        <div class="rounded-image mb-4" style="height: 200px; overflow: hidden;">
+                            <img src="{{ url_for('static', filename='images/features/smart-feedback.png') }}" 
+                                 alt="Smart Feedback" 
+                                 class="img-fluid w-100 h-100"
+                                 style="object-fit: cover;">
+                        </div>
+                        <p>Provide actionable feedback and personalised suggestions for improvement.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Calculator Section -->
+    <section id="calculator" class="section-spacing calculator-section">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="section-title">Time-Saving Calculator</h2>
+                <p class="section-subtitle">See how much time Scribl can save you</p>
+            </div>
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="feature-card">
+                        <div class="mb-4">
+                            <label for="classesRange" class="form-label">Number of Classes: <span id="classesValue">3</span></label>
+                            <input type="range" class="form-range" id="classesRange" min="1" max="10" value="3">
+                        </div>
+                        <div class="mb-4">
+                            <label for="studentsRange" class="form-label">Students per Class: <span id="studentsValue">25</span></label>
+                            <input type="range" class="form-range" id="studentsRange" min="5" max="35" value="25">
+                        </div>
+                        <div class="mb-4">
+                            <label for="assignmentsRange" class="form-label">Writing Assignments per Term: <span id="assignmentsValue">4</span></label>
+                            <input type="range" class="form-range" id="assignmentsRange" min="1" max="12" value="4">
+                        </div>
+                        <div class="row align-items-center mt-5">
+                            <div class="col-md-6">
+                                <div class="d-flex flex-column">
+                                    <div class="p-3 rounded mb-3" style="background: linear-gradient(135deg, rgba(43, 50, 255, 0.1) 0%, rgba(255, 62, 157, 0.08) 50%, rgba(255, 184, 48, 0.1) 100%);">
+                                        <h4 class="text-center">Without Scribl</h4>
+                                        <p class="text-center mb-0"><span id="timeWithout">300</span> hours</p>
+                                    </div>
+                                    <div class="p-3 rounded" style="background: linear-gradient(135deg, rgba(43, 50, 255, 0.15) 0%, rgba(255, 62, 157, 0.12) 50%, rgba(255, 184, 48, 0.15) 100%);">
+                                        <h4 class="text-center">With Scribl</h4>
+                                        <p class="text-center mb-0"><span id="timeWith">120</span> hours</p</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="text-center p-4 rounded" style="background: var(--primary-gradient); color: white;">
+                                    <h3>You Save</h3>
+                                    <div class="display-4 fw-bold"><span id="timeSaved">180</span></div>
+                                    <p class="mb-0">hours per term</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="section-spacing pricing-section section-gradient-dark">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="section-title">Pricing</h2>
+                <p class="section-subtitle">Choose the plan that fits your needs</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="pricing-card h-100 d-flex flex-column">
+                        <div>
+                            <h3 class="mb-3">Scribl Monthly</h3>
+                            <div class="display-6 fw-bold mb-3">30 aed<small class="fs-6 ms-2">/monthly</small></div>
+                            <p class="text-muted mb-4">Perfect for all teachers</p>
+                            <ul class="modern-list mb-4">
+                                <li><i class="fa fa-check"></i> Unlimited Classes</li>
+                                <li><i class="fa fa-check"></i> A.I. Writing Analysis</li>
+                                <li><i class="fa fa-check"></i> Progress tracking</li>
+                                <li><i class="fa fa-check"></i> Whole Class Feedback</li>
+                                <li><i class="fa fa-check"></i> Exporting Tools</li>
+                            </ul>
+                        </div>
+                        <div class="mt-auto">
+                            <a href="{{ url_for('signup') }}" class="btn btn-outline-success w-100">Get Started</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="pricing-card highlighted h-100 d-flex flex-column">
+                        <span class="badge position-absolute top-0 end-0 m-3" style="background-color: #66AD8D;">Most Popular</span>
+                        <div>
+                            <h3 class="mb-3">Scribl Annual</h3>
+                            <div class="display-6 fw-bold mb-3">300 aed<small class="fs-6 ms-2">/annually</small></div>
+                            <p class="text-muted mb-4">Save over 15% annually</p>
+                            <ul class="modern-list mb-4">
+                                <li><i class="fa fa-check"></i> Unlimited Classes</li>
+                                <li><i class="fa fa-check"></i> A.I. Writing Analysis</li>
+                                <li><i class="fa fa-check"></i> Progress tracking</li>
+                                <li><i class="fa fa-check"></i> Whole Class Feedback</li>
+                                <li><i class="fa fa-check"></i> Exporting Tools</li>
+                            </ul>
+                        </div>
+                        <div class="mt-auto">
+                            <a href="{{ url_for('signup') }}" class="btn btn-gradient w-100">Get Started</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="pricing-card h-100 d-flex flex-column">
+                        <div>
+                            <h3 class="mb-3">Whole School Subscription</h3>
+                            <div class="display-6 fw-bold mb-3">Custom</div>
+                            <p class="text-muted mb-4">For schools and districts</p>
+                            <ul class="modern-list mb-4">
+                                <li><i class="fa fa-check"></i> All Scribl features</li>
+                                <li><i class="fa fa-check"></i> Discounted license rate</li>
+                                <li><i class="fa fa-check"></i> Online CPD</li>
+                                <li><i class="fa fa-check"></i> 24/7 support</li>
+                            </ul>
+                        </div>
+                        <div class="mt-auto">
+                            <a href="#contact" class="btn btn-outline-success w-100">Contact Sales</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- About Section -->
+    <section id="about" class="section-spacing">
+        <div class="container">
+            <div class="mb-4">
+                <h2 class="section-title">About Us</h2>
+                <p class="section-subtitle">Meet the team behind Scribl</p>
+            </div>
+            <div class="row g-4 justify-content-center">
+                <div class="col-lg-10">
+                    <div class="feature-card d-flex flex-column flex-md-row align-items-md-start">
+                        <img src="{{ url_for('static', filename='images/team/Team Member.jpg') }}" 
+                             alt="Team Member" 
+                             style="max-width: 180px; height: auto; border-radius: 12px; object-fit: cover;"
+                             class="img-fluid me-md-4 mb-3 mb-md-0 align-self-center align-self-md-start">
+                        <div>
+                            <h4 class="mb-2">Andrew Wilkinson</h4>
+                            <p class="text-muted mb-3">CEO Classify Education</p>
+                            <p>Andrew is the founder and CEO of Classify Education. With over almost a decade of experience in education, he has now dedicated his career to creating innovative solutions that transform how educators assess and support student learning.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="mb-3">
+                        <div class="mb-2">
+                            <img src="{{ url_for('static', filename='images/classify.png') }}" 
+                                 alt="Classify Logo" 
+                                 style="height: 40px; margin-right: 15px;">
+                        </div>
+                        <div>
+                            <img src="{{ url_for('static', filename='images/Logo Update.png') }}" 
+                                 alt="Scribl Logo" 
+                                 style="height: 60px;">
+                        </div>
+                    </div>
+                    <p class="text-muted">Scribl is a product of Classify education</p>
+                </div>
+                <div class="col-md-2 mt-4 mt-md-0">
+                    <h5 class="mb-3">Product</h5>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><a href="#features" class="text-muted text-decoration-none">Features</a></li>
+                        <li class="mb-2"><a href="#pricing" class="text-muted text-decoration-none">Pricing</a></li>
+                        <li class="mb-2"><a href="#" class="text-muted text-decoration-none">Security</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-2 mt-4 mt-md-0">
+                    <h5 class="mb-3">Company</h5>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><a href="#about" class="text-muted text-decoration-none">About Us</a></li>
+                        <li class="mb-2"><a href="#" class="text-muted text-decoration-none">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-4 mt-4 mt-md-0">
+                    <h5 class="mb-3">Legal</h5>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><a href="{{ url_for('terms') }}" class="text-muted text-decoration-none">Terms & Conditions</a></li>
+                        <li class="mb-2"><a href="{{ url_for('privacy') }}" class="text-muted text-decoration-none">Privacy Policy</a></li>
+                        <li class="mb-2"><a href="{{ url_for('data_protection') }}" class="text-muted text-decoration-none">Data Protection</a></li>
+                        <li class="mb-2"><a href="{{ url_for('data_processing') }}" class="text-muted text-decoration-none">Data Processing</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="row mt-5">
+                <div class="col-lg-8 col-md-10">
+                    <h5 class="mb-3">Stay Updated</h5>
+                    <form class="d-flex gap-2 modern-form" id="newsletter-form">
+                        <input type="email" name="email" class="form-control flex-grow-1" placeholder="Enter your email" required>
+                        <button type="submit" class="btn btn-gradient">Subscribe</button>
+                    </form>
+                    <div id="subscribe-result" class="mt-2"></div>
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            const form = document.getElementById('newsletter-form');
+                            const result = document.getElementById('subscribe-result');
+
+                            form.addEventListener('submit', function(e) {
+                                e.preventDefault();
+                                const email = this.querySelector('input[name="email"]').value;
+
+                                // Store email in localStorage to check if user completed subscription
+                                localStorage.setItem('pending_subscription_email', email);
+
+                                // Open Beehiiv subscription page with email prefilled
+                                const subscribeWindow = window.open(`https://classify-education.beehiiv.com/subscribe?email=${encodeURIComponent(email)}`, '_blank');
+
+                                // Set up message listener for when user returns to the page
+                                window.addEventListener('focus', function onFocus() {
+                                    // Give user a moment to return to the page
+                                    setTimeout(function() {
+                                        // Prompt user to confirm if they completed subscription
+                                        const completed = confirm("Did you complete the newsletter subscription?");
+                                        if (completed) {
+                                            result.innerHTML = '<div class="text-success">Thank you for subscribing!</div>';
+                                            form.reset();
+                                        } else {
+                                            result.innerHTML = '<div class="text-muted">You can subscribe anytime later.</div>';
+                                        }
+                                        // Remove the event listener and pending email
+                                        window.removeEventListener('focus', onFocus);
+                                        localStorage.removeItem('pending_subscription_email');
+                                    }, 1000);
+                                }, { once: true });
+                            });
+
+                            // Check if there's a pending subscription from a previous session
+                            if (localStorage.getItem('pending_subscription_email')) {
+                                const pendingEmail = localStorage.getItem('pending_subscription_email');
+                                form.querySelector('input[name="email"]').value = pendingEmail;
+                                localStorage.removeItem('pending_subscription_email');
+                            }
+                        });
+                    </script>
+                </div>
+            </div>
+            <hr class="my-4">
+            <div class="text-center text-muted">
+                <small>&copy; 2025 Scribl. All rights reserved.</small>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                }
+            });
+        });
+
+        // Navbar scroll behavior
+        const navbar = document.querySelector('.navbar');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 50) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
+        });
+
+        // Time-saving calculator
+        document.addEventListener('DOMContentLoaded', function() {
+            const classesRange = document.getElementById('classesRange');
+            const studentsRange = document.getElementById('studentsRange');
+            const assignmentsRange = document.getElementById('assignmentsRange');
+
+            const classesValue = document.getElementById('classesValue');
+            const studentsValue = document.getElementById('studentsValue');
+            const assignmentsValue = document.getElementById('assignmentsValue');
+
+            const timeWithout = document.getElementById('timeWithout');
+            const timeWith = document.getElementById('timeWith');
+            const timeSaved = document.getElementById('timeSaved');
+
+            function updateCalculator() {
+                const classes = parseInt(classesRange.value);
+                const students = parseInt(studentsRange.value);
+                const assignments = parseInt(assignmentsRange.value);
+
+                // Update displayed values
+                classesValue.textContent = classes;
+                studentsValue.textContent = students;
+                assignmentsValue.textContent = assignments;
+
+                // Calculate time in hours
+                // Assume each assignment takes 10 minutes to mark without Scribl
+                const minutesPerAssignment = 10;
+                const totalMinutesWithout = classes * students * assignments * minutesPerAssignment;
+                const hoursWithout = Math.round(totalMinutesWithout / 60);
+
+                // Calculate time with Scribl (40% of original time)
+                const hoursWith = Math.round(hoursWithout * 0.4);
+                const hoursSaved = hoursWithout - hoursWith;
+
+                // Update results
+                timeWithout.textContent = hoursWithout;
+                timeWith.textContent = hoursWith;
+                timeSaved.textContent = hoursSaved;
+            }
+
+            // Add event listeners
+            classesRange.addEventListener('input', updateCalculator);
+            studentsRange.addEventListener('input', updateCalculator);
+            assignmentsRange.addEventListener('input', updateCalculator);
+
+            // Initialize
+            updateCalculator();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}View Classes{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .chart-toggle {
+        display: inline-flex;
+        background-color: #4a4a4a;
+        border-radius: 0.5rem;
+        padding: 0.25rem;
+        gap: 0.25rem;
+    }
+
+    .chart-toggle button {
+        border-radius: 0.25rem;
+        padding: 0.375rem 0.75rem;
+        border: none;
+        background: transparent;
+        color: var(--bs-light);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .chart-toggle button.active {
+        background-color: var(--bs-primary);
+        color: white;
+    }
+
+    .chart-container {
+        width: 100%;
+        height: 400px;
+        margin-bottom: 1rem;
+        position: relative;
+    }
+
+    .class-card {
+        transition: all 0.3s ease;
+    }
+
+    .class-header {
+        cursor: pointer;
+    }
+
+    .class-header:hover {
+        background-color: rgba(62, 93, 88, 0.1);
+    }
+
+    .collapse-icon {
+        transition: transform 0.3s ease;
+    }
+
+    .collapsed .collapse-icon {
+        transform: rotate(-90deg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Classes Overview</h1>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if classes %}
+            <div class="accordion" id="classesAccordion">
+                {% for class in classes %}
+                    <div class="card class-card mb-4">
+                        <div class="card-header class-header d-flex justify-content-between align-items-center" 
+                             data-bs-toggle="collapse" 
+                             data-bs-target="#class{{ class.id }}" 
+                             aria-expanded="true">
+                            <div class="d-flex align-items-center">
+                                <i class="fa fa-chevron-down collapse-icon me-2"></i>
+                                <h5 class="mb-0">{{ class.name }} ({{ class.year_group }})</h5>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#analytics{{ class.id }}"
+                                        onclick="event.stopPropagation()">
+                                    <i class="fa fa-chart-line"></i> Analytics
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#students{{ class.id }}"
+                                        onclick="event.stopPropagation()">
+                                    <i class="fa fa-users"></i> Students
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="class{{ class.id }}" class="collapse show">
+                            <!-- Analytics Section -->
+                            <div class="collapse" id="analytics{{ class.id }}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="card-title">Class Progress Analysis</h6>
+                                        <div class="chart-toggle">
+                                            <button type="button" class="active" data-graph="marks{{ class.id }}">Marks by Genre</button>
+                                            <button type="button" data-graph="age{{ class.id }}">Writing Age</button>
+                                        </div>
+                                    </div>
+                                    <div class="chart-container">
+                                        <canvas id="marksChart{{ class.id }}"></canvas>
+                                        <canvas id="ageChart{{ class.id }}" style="display: none;"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Students Section -->
+                            <div class="collapse show" id="students{{ class.id }}">
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Student Name</th>
+                                                    <th class="text-center">Writing Samples</th>
+                                                    <th class="text-center">Average Mark (%)</th>
+                                                    <th class="text-center">Average Writing Age</th>
+                                                    <th class="text-center">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for student in class.students %}
+                                                <tr>
+                                                    <td>{{ student.name }}</td>
+                                                    <td class="text-center">{{ student.writing_samples|length }}</td>
+                                                    <td class="text-center">
+                                                        {% set total_marks = [] %}
+                                                        {% for sample in student.writing_samples %}
+                                                            {% if sample.criteria_marks %}
+                                                                {% set mark = (sample.criteria_marks|sum(attribute='score') / (sample.criteria_marks|length * 2) * 100)|round|int %}
+                                                                {% set _ = total_marks.append(mark) %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        {% if total_marks %}
+                                                            {{ (total_marks|sum / total_marks|length)|round|int }}%
+                                                        {% else %}
+                                                            -
+                                                        {% endif %}
+                                                    </td>
+                                                    <td class="text-center">
+                                                        {% set total_ages = [] %}
+                                                        {% for sample in student.writing_samples %}
+                                                            {% if sample.writing_age %}
+                                                                {% set age_parts = sample.writing_age.replace('Estimated writing age:', '').strip().split() %}
+                                                                {% set age_years = age_parts[0]|float if age_parts|length > 0 else 0 %}
+                                                                {% set age_months = age_parts[2]|float / 12 if age_parts|length > 2 else 0 %}
+                                                                {% set _ = total_ages.append(age_years + age_months) %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        {% if total_ages %}
+                                                            {{ (total_ages|sum / total_ages|length)|round(1) }} years
+                                                        {% else %}
+                                                            -
+                                                        {% endif %}
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <a href="{{ url_for('student_portfolio', student_id=student.id) }}" 
+                                                           class="btn btn-sm btn-outline-primary">
+                                                            <i class="fa fa-folder-open"></i> View Portfolio
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chart initialization for this class -->
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            // Add collapse icon rotation
+                            const classHeader{{ class.id }} = document.querySelector('[data-bs-target="#class{{ class.id }}"]');
+                            classHeader{{ class.id }}.addEventListener('click', function() {
+                                const icon = this.querySelector('.collapse-icon');
+                                this.classList.toggle('collapsed');
+                            });
+
+                            const chartDataKey{{ class.id }} = 'chartData{{ class.id }}';
+                            let chartData = {
+                                genres: [],
+                                marks: {},
+                                writingAges: {},
+                                expectedAges: {},
+                                dates: {}
+                            };
+
+                            {% for student in class.students %}
+                                {% for sample in student.writing_samples %}
+                                    {% set genre = sample.assignment.genre|title if sample.assignment else 'Free Writing' %}
+                                    if (!chartData.genres.includes('{{ genre }}')) {
+                                        chartData.genres.push('{{ genre }}');
+                                        chartData.marks['{{ genre }}'] = [];
+                                        chartData.writingAges['{{ genre }}'] = [];
+                                        chartData.expectedAges['{{ genre }}'] = [];
+                                        chartData.dates['{{ genre }}'] = [];
+                                    }
+
+                                    {% if sample.criteria_marks %}
+                                        {% set mark = (sample.criteria_marks|sum(attribute='score') / (sample.criteria_marks|length * 2) * 100)|round|int %}
+                                        chartData.marks['{{ genre }}'].push({{ mark }});
+                                    {% endif %}
+
+                                    {% if sample.writing_age %}
+                                        {% set writing_age_parts = sample.writing_age.replace('Estimated writing age:', '').strip().split() %}
+                                        {% set writing_age_years = writing_age_parts[0]|float if writing_age_parts|length > 0 else 0 %}
+                                        {% set writing_age_months = writing_age_parts[2]|float / 12 if writing_age_parts|length > 2 else 0 %}
+                                        {% set calculated_writing_age = writing_age_years + writing_age_months %}
+                                        chartData.writingAges['{{ genre }}'].push({{ calculated_writing_age }});
+
+                                        {% set student_age = ((sample.created_at.date() - student.date_of_birth).days / 365.25)|round(1) %}
+                                        chartData.expectedAges['{{ genre }}'].push({{ student_age }});
+                                        chartData.dates['{{ genre }}'].push('{{ sample.created_at.strftime("%Y-%m-%d") }}');
+                                    {% endif %}
+                                {% endfor %}
+                            {% endfor %}
+
+                            // Create time-ordered data points for each genre+date combination
+                            const dataPoints = [];
+                            chartData.genres.forEach(genre => {
+                                const dates = chartData.dates[genre];
+                                dates.forEach((date, idx) => {
+                                    const marksList = chartData.marks[genre];
+                                    const writingAgesList = chartData.writingAges[genre];
+                                    const expectedAgesList = chartData.expectedAges[genre];
+
+                                    if (marksList && marksList[idx]) {
+                                        dataPoints.push({
+                                            genre,
+                                            date,
+                                            label: `${genre}\n${date}`,
+                                            mark: marksList[idx],
+                                            writingAge: writingAgesList[idx],
+                                            expectedAge: expectedAgesList[idx],
+                                            timestamp: new Date(date).getTime() // For sorting
+                                        });
+                                    }
+                                });
+                            });
+
+                            // Sort data points chronologically by date
+                            dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+
+                            const chronologicalData = {
+                                labels: dataPoints.map(point => point.label),
+                                marks: dataPoints.map(point => point.mark),
+                                writingAges: dataPoints.map(point => point.writingAge),
+                                expectedAges: dataPoints.map(point => point.expectedAge)
+                            };
+
+                            // Initialize charts
+                            const marksCtx = document.getElementById('marksChart{{ class.id }}').getContext('2d');
+                            const ageCtx = document.getElementById('ageChart{{ class.id }}').getContext('2d');
+
+                            // Marks by Genre Chart
+                            new Chart(marksCtx, {
+                                type: 'line',
+                                data: {
+                                    labels: chronologicalData.labels,
+                                    datasets: [{
+                                        label: 'Class Average Score',
+                                        data: chronologicalData.marks,
+                                        backgroundColor: 'rgba(25, 135, 84, 0.2)',
+                                        borderColor: 'rgb(25, 135, 84)',
+                                        borderWidth: 2,
+                                        tension: 0.1,
+                                        fill: true,
+                                        pointRadius: 5,
+                                        pointHoverRadius: 7
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    scales: {
+                                        y: {
+                                            beginAtZero: true,
+                                            max: 100,
+                                            title: {
+                                                display: true,
+                                                text: 'Average Score (%)'
+                                            }
+                                        },
+                                        x: {
+                                            title: {
+                                                display: true,
+                                                text: 'Genre & Date'
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+
+                            // Age Comparison Chart
+                            new Chart(ageCtx, {
+                                type: 'line',
+                                data: {
+                                    labels: chronologicalData.labels,
+                                    datasets: [{
+                                        label: 'Average Writing Age',
+                                        data: chronologicalData.writingAges,
+                                        borderColor: 'rgb(25, 135, 84)',
+                                        backgroundColor: 'rgba(25, 135, 84, 0.2)',
+                                        borderWidth: 2,
+                                        tension: 0.1,
+                                        fill: true,
+                                        pointRadius: 5,
+                                        pointHoverRadius: 7
+                                    }, {
+                                        label: 'Expected Age',
+                                        data: chronologicalData.expectedAges,
+                                        borderColor: 'rgb(13, 110, 253)',
+                                        backgroundColor: 'rgba(13, 110, 253, 0.2)',
+                                        borderWidth: 2,
+                                        tension: 0.1,
+                                        fill: true,
+                                        pointRadius: 5,
+                                        pointHoverRadius: 7
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    scales: {
+                                        y: {
+                                            title: {
+                                                display: true,
+                                                text: 'Age (Years)'
+                                            }
+                                        },
+                                        x: {
+                                            title: {
+                                                display: true,
+                                                text: 'Genre & Date'
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+
+                            // Chart toggle functionality
+                            const toggleButtons = document.querySelectorAll(`[data-graph$="{{ class.id }}"]`);
+                            const chartCanvases = {
+                                [`marks{{ class.id }}`]: document.getElementById('marksChart{{ class.id }}'),
+                                [`age{{ class.id }}`]: document.getElementById('ageChart{{ class.id }}')
+                            };
+
+                            toggleButtons.forEach(button => {
+                                button.addEventListener('click', function(e) {
+                                    e.stopPropagation();  // Prevent collapse toggle
+                                    const graphType = this.dataset.graph;
+                                    toggleButtons.forEach(btn => btn.classList.remove('active'));
+                                    this.classList.add('active');
+
+                                    Object.entries(chartCanvases).forEach(([type, canvas]) => {
+                                        canvas.style.display = type === graphType ? 'block' : 'none';
+                                    });
+                                });
+                            });
+                        });
+                    </script>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fa fa-info-circle me-2"></i>No classes found. Start by adding a class.
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
